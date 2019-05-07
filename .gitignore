@@ -1,0 +1,5 @@
+resources/**
+books/**
+*.tmp
+*.csv
+__pycache__/

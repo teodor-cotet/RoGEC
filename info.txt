@@ -1,0 +1,4 @@
+typo generator:
+    https://github.com/wsong/Typo-Distance/blob/master/typodistance.py
+    -based on Knuth algorithm
+    -insertion more likely than deletion
