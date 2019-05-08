@@ -33,7 +33,7 @@ class CorpusGenerator():
         "Ţ": "Ț",
     }
     MAX_SENT_TOKENS = 18
-    FAST_TEXT = "/home/teo/projects/readme-models/models/fasttext2/fast_text.model"
+    FAST_TEXT = "/home/teo/projects/readme-models/models/fasttext_fb/wiki.ro"
 
     def __init__(self):
         self.files = []
@@ -60,11 +60,13 @@ class CorpusGenerator():
             typo = random.choice([x for x in typoGenerator(text_token, 2)][1:])
             return typo
         elif mistke_type is Mistake.INFLECTED:
-            candidates = self.fasttext.similar_by_vector(token, topn=200)
+            candidates = self.fasttext.similar_by_vector(token.lemma_, topn=200)
             # check lemma for each candidate
             for fast_token, coss in candidates:
-                if fast_token.
-
+                if self.parser(fast_token)[0].lemma_ == token.lemma_ and fast_token != token:
+                    print(fast_token, token)
+                    return fast_token
+        return None
     
     def clean_text(self, text: str):
         list_text = list(text)
@@ -97,20 +99,24 @@ class CorpusGenerator():
                             continue
                         try:
                             text_tok = self.modify_word(tokens[index], mistake_type=Mistake.INFLECTED)
-                            text_tokens[index] = text_tok
-                            sent3 = " ".join(text_tokens)
-                            line.append(sent2)
-                            line.append(sent3)
-                            line.append(tokens[index].tag_)
-                            line.append(Mistake.INFLECTED.value)
-                            break
+                            if text_tok is not None:
+                                text_tokens[index] = text_tok
+                                sent3 = " ".join(text_tokens)
+                                line.append(sent2)
+                                line.append(sent3)
+                                line.append(tokens[index].tag_)
+                                line.append(Mistake.INFLECTED.value)
+                                break
+                            else:
+                                count_tries += 1
+                                continue
                         except:
                             count_tries += 1
                   
                 if len(line) > 1:
                     lines.append(line)
         print(len(lines))
-        with open('typos.csv', 'w') as writeFile:
+        with open('inflected.csv', 'w') as writeFile:
             writer = csv.writer(writeFile)
             writer.writerows(lines)  
         # print(self.files)
