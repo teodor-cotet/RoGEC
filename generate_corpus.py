@@ -8,6 +8,7 @@ from os.path import isdir, isfile, join
 from nltk.tokenize import sent_tokenize, WordPunctTokenizer
 from typing import List, Iterable
 from gensim.models import FastText
+from gensim.models.wrappers import FastText as FastTextWrapper
 import sys
 import csv
 sys.path.insert(0, '/home/teo/projects/Readerbench-python/')
@@ -33,7 +34,8 @@ class CorpusGenerator():
         "Ţ": "Ț",
     }
     MAX_SENT_TOKENS = 18
-    FAST_TEXT = "/home/teo/projects/readme-models/models/fasttext_fb/wiki.ro"
+    #FAST_TEXT = "/home/teo/projects/readme-models/models/fasttext_fb/wiki.ro"
+    FAST_TEXT = "/home/teo/repos/langcorrections/fasttext_fb/wiki.ro"
 
     def __init__(self):
         self.files = []
@@ -42,8 +44,8 @@ class CorpusGenerator():
                 self.files.append(join(CorpusGenerator.PATH_RAW_CORPUS, f))
         
         self.parser = SpacyParser.get_instance().get_model(Lang.RO)
-        self.fasttext = FastText.load(CorpusGenerator.FAST_TEXT)
-
+        #self.fasttext = FastText.load(CorpusGenerator.FAST_TEXT)
+        self.fasttext = FastTextWrapper.load_fasttext_format(CorpusGenerator.FAST_TEXT)
                 
     def split_sentences(self, fileName: str) -> Iterable[List[str]]:
         # sentences = []
@@ -53,14 +55,17 @@ class CorpusGenerator():
                 for sent in sent_tokenize(line):
                     yield sent
 
-    def modify_word(self, token, mistke_type=Mistake.TYPO):
+    def modify_word(self, token, mistake_type):
         text_token = token.text
-
+        print('xxxxx')
         if mistke_type is Mistake.TYPO:
             typo = random.choice([x for x in typoGenerator(text_token, 2)][1:])
             return typo
         elif mistke_type is Mistake.INFLECTED:
             candidates = self.fasttext.similar_by_vector(token.lemma_, topn=200)
+            print(candidates)
+            print(self.parser(fast_token)[0].lemma_)
+            print(token.lemma_)
             # check lemma for each candidate
             for fast_token, coss in candidates:
                 if self.parser(fast_token)[0].lemma_ == token.lemma_ and fast_token != token:
@@ -97,21 +102,19 @@ class CorpusGenerator():
                             or tagg.startswith("DASH") or tagg.startswith("COLON")): # punctuation
                             count_tries += 1
                             continue
-                        try:
-                            text_tok = self.modify_word(tokens[index], mistake_type=Mistake.INFLECTED)
-                            if text_tok is not None:
-                                text_tokens[index] = text_tok
-                                sent3 = " ".join(text_tokens)
-                                line.append(sent2)
-                                line.append(sent3)
-                                line.append(tokens[index].tag_)
-                                line.append(Mistake.INFLECTED.value)
-                                break
-                            else:
-                                count_tries += 1
-                                continue
-                        except:
+                        text_tok = self.modify_word(tokens[index], Mistake.INFLECTED)
+                        if text_tok is not None:
+                            text_tokens[index] = text_tok
+                            sent3 = " ".join(text_tokens)
+                            line.append(sent2)
+                            line.append(sent3)
+                            line.append(tokens[index].tag_)
+                            line.append(Mistake.INFLECTED.value)
+                            break
+                        else:
                             count_tries += 1
+                            continue
+                        count_tries += 1
                   
                 if len(line) > 1:
                     lines.append(line)
