@@ -11,7 +11,7 @@ from gensim.models import FastText
 from gensim.models.wrappers import FastText as FastTextWrapper
 import sys
 import csv
-sys.path.insert(0, '/home/teo/projects/Readerbench-python/')
+sys.path.insert(0, '/home/teo/repos/Readerbench-python/')
 
 from rb.parser.spacy_parser import SpacyParser
 from rb.core.lang import Lang
@@ -26,7 +26,7 @@ class CorpusGenerator():
 
 
     PATH_RAW_CORPUS = "books/"
-    MIN_SENT_TOKENS = 4
+    MIN_SENT_TOKENS = 6
     CORRECT_DIACS = {
         "ş": "ș",
         "Ş": "Ș",
@@ -57,27 +57,30 @@ class CorpusGenerator():
 
     def modify_word(self, token, mistake_type):
         text_token = token.text
-        print('xxxxx')
-        if mistke_type is Mistake.TYPO:
+        #print('xxxxx')
+        if mistake_type is Mistake.TYPO:
             typo = random.choice([x for x in typoGenerator(text_token, 2)][1:])
             return typo
-        elif mistke_type is Mistake.INFLECTED:
-            candidates = self.fasttext.similar_by_vector(token.lemma_, topn=200)
-            print(candidates)
-            print(self.parser(fast_token)[0].lemma_)
-            print(token.lemma_)
+        elif mistake_type is Mistake.INFLECTED:
+            try:
+                candidates = self.fasttext.similar_by_word(token.lemma_, topn=200)
+            #print(candidates)
+            #print(token.lemma_)
             # check lemma for each candidate
-            for fast_token, coss in candidates:
-                if self.parser(fast_token)[0].lemma_ == token.lemma_ and fast_token != token:
-                    print(fast_token, token)
-                    return fast_token
+                for fast_token, coss in candidates:
+                    #print(self.parser(fast_token)[0].lemma_)
+                    if self.parser(fast_token)[0].lemma_ == token.lemma_ and fast_token != token.text:
+                        #print(fast_token, token)
+                        return fast_token
+            except:
+                return None
         return None
     
     def clean_text(self, text: str):
         list_text = list(text)
         # some cleaning correct diacritics + eliminate \
         text = "".join([CorpusGenerator.CORRECT_DIACS[c] if c in CorpusGenerator.CORRECT_DIACS else c for c in list_text])
-        return text
+        return text.lower()
 
     def generate(self):
         lines = []
@@ -85,7 +88,7 @@ class CorpusGenerator():
             for i, sent in enumerate(self.split_sentences(ffile)):
                 line = []
                 print(len(lines))
-                if len(lines) > 12000:
+                if len(lines) > 1000000:
                     break
                 sent = self.clean_text(sent)
                 docs_ro = self.parser(sent)
@@ -95,14 +98,14 @@ class CorpusGenerator():
                 
                 if len(tokens) >= CorpusGenerator.MIN_SENT_TOKENS and len(tokens) <= CorpusGenerator.MAX_SENT_TOKENS:
                     count_tries = 0
-                    while count_tries < 32:
+                    while count_tries < 20:
                         index = random.randint(0, len(tokens) - 1)
                         tagg = str(tokens[index].tag_)
                         if (tagg.startswith("P") or tagg.startswith("COMMA")
                             or tagg.startswith("DASH") or tagg.startswith("COLON")): # punctuation
                             count_tries += 1
                             continue
-                        text_tok = self.modify_word(tokens[index], Mistake.INFLECTED)
+                        text_tok = self.modify_word(tokens[index], Mistake.TYPO)
                         if text_tok is not None:
                             text_tokens[index] = text_tok
                             sent3 = " ".join(text_tokens)
@@ -119,7 +122,7 @@ class CorpusGenerator():
                 if len(line) > 1:
                     lines.append(line)
         print(len(lines))
-        with open('inflected.csv', 'w') as writeFile:
+        with open('typos.csv', 'w') as writeFile:
             writer = csv.writer(writeFile)
             writer.writerows(lines)  
         # print(self.files)
