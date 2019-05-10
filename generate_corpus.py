@@ -57,24 +57,21 @@ class CorpusGenerator():
 
     def modify_word(self, token, mistake_type):
         text_token = token.text
-        #print('xxxxx')
-        if mistake_type is Mistake.TYPO:
-            typo = random.choice([x for x in typoGenerator(text_token, 2)][1:])
-            return typo
-        elif mistake_type is Mistake.INFLECTED:
-            try:
+        try:
+            if mistake_type is Mistake.TYPO:
+                typo = random.choice([x for x in typoGenerator(text_token, 2)][1:])
+                return typo
+            elif mistake_type is Mistake.INFLECTED:
                 candidates = self.fasttext.similar_by_word(token.lemma_, topn=200)
-            #print(candidates)
-            #print(token.lemma_)
-            # check lemma for each candidate
+
                 for fast_token, coss in candidates:
                     #print(self.parser(fast_token)[0].lemma_)
                     if self.parser(fast_token)[0].lemma_ == token.lemma_ and fast_token != token.text:
                         #print(fast_token, token)
                         return fast_token
-            except:
-                return None
-        return None
+            return None
+        except:
+            return None
     
     def clean_text(self, text: str):
         list_text = list(text)
@@ -84,7 +81,7 @@ class CorpusGenerator():
 
     def generate(self):
         lines = []
-        for ffile in self.files[:1]:
+        for ffile in self.files:
             for i, sent in enumerate(self.split_sentences(ffile)):
                 line = []
                 print(len(lines))
@@ -95,29 +92,31 @@ class CorpusGenerator():
                 tokens = [token for token in docs_ro]
                 text_tokens = [token.text for token in docs_ro]
                 sent2 = " ".join(text_tokens)
-                
-                if len(tokens) >= CorpusGenerator.MIN_SENT_TOKENS and len(tokens) <= CorpusGenerator.MAX_SENT_TOKENS:
-                    count_tries = 0
-                    while count_tries < 20:
-                        index = random.randint(0, len(tokens) - 1)
-                        tagg = str(tokens[index].tag_)
-                        if (tagg.startswith("P") or tagg.startswith("COMMA")
-                            or tagg.startswith("DASH") or tagg.startswith("COLON")): # punctuation
+                try:
+                    if len(tokens) >= CorpusGenerator.MIN_SENT_TOKENS and len(tokens) <= CorpusGenerator.MAX_SENT_TOKENS:
+                        count_tries = 0
+                        while count_tries < 20:
+                            index = random.randint(0, len(tokens) - 1)
+                            tagg = str(tokens[index].tag_)
+                            if (tagg.startswith("P") or tagg.startswith("COMMA")
+                                or tagg.startswith("DASH") or tagg.startswith("COLON")): # punctuation
+                                count_tries += 1
+                                continue
+                            text_tok = self.modify_word(tokens[index], Mistake.TYPO)
+                            if text_tok is not None:
+                                text_tokens[index] = text_tok
+                                sent3 = " ".join(text_tokens)
+                                line.append(sent2)
+                                line.append(sent3)
+                                line.append(tokens[index].tag_)
+                                line.append(Mistake.INFLECTED.value)
+                                break
+                            else:
+                                count_tries += 1
+                                continue
                             count_tries += 1
-                            continue
-                        text_tok = self.modify_word(tokens[index], Mistake.TYPO)
-                        if text_tok is not None:
-                            text_tokens[index] = text_tok
-                            sent3 = " ".join(text_tokens)
-                            line.append(sent2)
-                            line.append(sent3)
-                            line.append(tokens[index].tag_)
-                            line.append(Mistake.INFLECTED.value)
-                            break
-                        else:
-                            count_tries += 1
-                            continue
-                        count_tries += 1
+                except:
+                    line = []
                   
                 if len(line) > 1:
                     lines.append(line)
