@@ -6,6 +6,7 @@ import os
 import re
 import spacy
 import csv
+from collections import Counter
 
 import tensorflow as tf
 from tensorflow import keras 
@@ -37,6 +38,7 @@ class Model:
     FAST_TEXT = "/home/teo/repos/langcorrections/fasttext_fb/wiki.ro"
     # filename is an elasticsearch dump, use npm elasticdump
     MAX_SENT_TOKENS = 18
+    MAX_CHARS_TOKENS = 30
     GRU_CELL_SIZE = 64
     PATIENCE = 8
     EPOCHS = 100
@@ -70,9 +72,9 @@ class Model:
                         word2id[token] = count
                         id2word[count] = token
                         count += 1
-
+                cc = Counter(in_tokens)
                 for i, token in enumerate(in_tokens):
-                    if token != out_tokens[i]:
+                    if token != out_tokens[i] and cc[token] == 1:
                         text_in.append(in_tokens)
                         wrong_words.append(token)
                         correct_words.append(out_tokens[i])
@@ -88,20 +90,35 @@ class Model:
 
         return text_in[:n1], wrong_words[:n1], correct_words[:n1],\
                 text_in[n1:], wrong_words[n1:], correct_words[n1:]
-    
-    def construct_input(self, train_in):
+
+    # def construct_window_chars(self, sample, j):
+        
+
+    def construct_input(self, in_tokens_sent, in_ww):
         #self.fasttext = FastTextWrapper.load_fasttext_format(Model.FAST_TEXT)
         
-        inputs = []
-        for sample in train_in:
+        inputs_sent, in_emb_ww, chars_wind = [], [], []
+        chars = list(in_tokens_sent)
+
+        for i, sample in enumerate(in_tokens_sent):
             inn = np.zeros((Model.MAX_SENT_TOKENS, 300))
-            for i, token in enumerate(sample):
+            for j, token in enumerate(sample):
                 # try:
                 #     inn[Model.MAX_SENT_TOKENS - i - 1][:] = np.float32(self.fasttext.wv[token])
                 # except:
-                inn[Model.MAX_SENT_TOKENS - i - 1][:] = np.float32([0] * 300)
-            inputs.append(inn)
-        return inputs
+                inn[Model.MAX_SENT_TOKENS - j - 1][:] = np.float32([0] * 300)
+                # if token == in_ww[i]:
+                #     char_w = self.construct_window_chars(sample, j)
+
+            # try:
+            #     w_emb = np.float32(self.fasttext.wv[token])
+            # except:
+            w_emb = np.float32([0] * 300)
+
+            in_emb_ww.append(w_emb)
+            inputs_sent.append(inn)
+
+        return [inputs_sent, in_emb_ww]
     
     def construct_output(self, train_cw, word2id):
         out = []
@@ -116,22 +133,27 @@ class Model:
 
         train_in, train_ww, train_cw, test_in, test_ww, test_cw = \
             self.split_dataset(text_in, wrong_words, correct_words)
-
+        print(len(train_in), len(train_ww))
         sentence_embeddings_layer = Input(shape=((Model.MAX_SENT_TOKENS, 300,)))
-        sentence_lstm_layer = GRU(units=Model.GRU_CELL_SIZE, input_shape=(Model.MAX_SENT_TOKENS, 300,))(sentence_embeddings_layer)
-
-        d1 = keras.layers.Dense(Model.DENSES[0], activation='tanh')(sentence_lstm_layer)                                                 
+        sentence_lstm_layer = GRU(units=Model.GRU_CELL_SIZE, input_shape=(Model.MAX_SENT_TOKENS, 300,))
+        bi_lstm_layer = keras.layers.Bidirectional(layer=sentence_lstm_layer,\
+									merge_mode="concat")(sentence_embeddings_layer)
+        word_emb = Input(shape=(300,))
+        conc = keras.layers.concatenate([bi_lstm_layer, word_emb], axis=-1)
+        d1 = keras.layers.Dense(Model.DENSES[0], activation='tanh')(conc)                                                 
         output = keras.layers.Dense(voc_size, activation='softmax')(d1)
-        train_inn = self.construct_input(train_in)
+
+        
+        train_inn = self.construct_input(train_in, train_ww)
         train_out = self.construct_output(train_cw, word2id)
         callbacks = [keras.callbacks.EarlyStopping(monitor='val_loss', patience=Model.PATIENCE)]
-        model = keras.models.Model(inputs=sentence_embeddings_layer,
+        model = keras.models.Model(inputs=[sentence_embeddings_layer, word_emb],
 								   outputs=output)
         model.compile(optimizer='adam',\
                     loss='categorical_crossentropy',\
                     metrics=['accuracy'])
         print(model.summary())
-        model.fit([train_inn],
+        model.fit(train_inn,
 				  [train_out],
 				  batch_size=Model.BATCH_SIZE, 
                   epochs=Model.EPOCHS, 
