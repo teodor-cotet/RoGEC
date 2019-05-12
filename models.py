@@ -35,7 +35,7 @@ args = None
 
 
 class Model:
-    FAST_TEXT = "/home/teo/repos/langcorrections/fasttext_fb/wiki.ro"
+    FAST_TEXT = "fasttext_fb/wiki.ro"
     # filename is an elasticsearch dump, use npm elasticdump
     MAX_SENT_TOKENS = 18
     MAX_CHARS_TOKENS = 30
@@ -95,7 +95,7 @@ class Model:
         
 
     def construct_input(self, in_tokens_sent, in_ww):
-        #self.fasttext = FastTextWrapper.load_fasttext_format(Model.FAST_TEXT)
+        self.fasttext = FastTextWrapper.load_fasttext_format(Model.FAST_TEXT)
         
         inputs_sent, in_emb_ww, chars_wind = [], [], []
         chars = list(in_tokens_sent)
@@ -103,17 +103,17 @@ class Model:
         for i, sample in enumerate(in_tokens_sent):
             inn = np.zeros((Model.MAX_SENT_TOKENS, 300))
             for j, token in enumerate(sample):
-                # try:
-                #     inn[Model.MAX_SENT_TOKENS - i - 1][:] = np.float32(self.fasttext.wv[token])
-                # except:
-                inn[Model.MAX_SENT_TOKENS - j - 1][:] = np.float32([0] * 300)
+                try:
+                    inn[Model.MAX_SENT_TOKENS - i - 1][:] = np.float32(self.fasttext.wv[token])
+                except:
+                    inn[Model.MAX_SENT_TOKENS - j - 1][:] = np.float32([0] * 300)
                 # if token == in_ww[i]:
                 #     char_w = self.construct_window_chars(sample, j)
 
-            # try:
-            #     w_emb = np.float32(self.fasttext.wv[token])
-            # except:
-            w_emb = np.float32([0] * 300)
+            try:
+                w_emb = np.float32(self.fasttext.wv[token])
+            except:
+                w_emb = np.float32([0] * 300)
 
             in_emb_ww.append(w_emb)
             inputs_sent.append(inn)
