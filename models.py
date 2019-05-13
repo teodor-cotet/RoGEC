@@ -42,8 +42,8 @@ class Model:
     GRU_CELL_SIZE = 64
     PATIENCE = 8
     EPOCHS = 100
-    BATCH_SIZE = 32
-    DENSES = [64]
+    BATCH_SIZE = 64
+    DENSES = [128]
 
 
     def __init__(self): 
