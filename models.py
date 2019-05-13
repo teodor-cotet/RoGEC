@@ -18,7 +18,6 @@ from tensorflow.keras.callbacks import ModelCheckpoint, LambdaCallback, Callback
 
 from keras.backend.tensorflow_backend import set_session
 
-
 from gensim.models.keyedvectors import KeyedVectors
 
 from sklearn.model_selection import StratifiedShuffleSplit
@@ -47,7 +46,10 @@ class Model:
 
 
     def __init__(self): 
-        pass
+        config = tf.ConfigProto()
+        #config.gpu_options.per_process_gpu_memory_fraction = 0.2
+        config.gpu_options.allow_growth = True
+        set_session(tf.Session(config=config))
 
     # elasticsearch dump file
     def load_data(self, filename='codeDuTravail.json'):
