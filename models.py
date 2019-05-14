@@ -70,7 +70,7 @@ class Model:
                 out_tokens = out.split()
                 if len(in_tokens) != len(out_tokens):
                     continue
-                if args.small_run == True and jj > 500:
+                if args.small_run == True and jj > 5000:
                     continue
                     
                 for token in out_tokens:
@@ -92,7 +92,6 @@ class Model:
     def split_dataset(self, text_in, wrong_words, correct_words):
         n = len(text_in)
         n1 = int(n * 0.8)
-        n2 = int(n * 0.2)
 
         return text_in[:n1], wrong_words[:n1], correct_words[:n1],\
                 text_in[n1:], wrong_words[n1:], correct_words[n1:]
@@ -157,7 +156,7 @@ class Model:
         return out
 
     def run_model(self):
-        text_in, wrong_words, correct_words, id2word, word2id = self.load_data(filename="typos.csv")
+        text_in, wrong_words, correct_words, id2word, word2id = self.load_data(filename=args.input_file)
         voc_size = len(id2word)
 
         train_in, train_ww, train_cw, test_in, test_ww, test_cw = \
@@ -168,7 +167,9 @@ class Model:
         bi_lstm_layer_sent = keras.layers.Bidirectional(layer=sentence_lstm_layer,\
 									merge_mode="concat")(sentence_embeddings_layer)
         word_emb = Input(shape=(300,))
-        if args.no_chars == False:
+        if args.no_chars == True:
+            conc = keras.layers.concatenate([bi_lstm_layer_sent, word_emb], axis=-1)
+        else:
             input_character_window = keras.layers.Input(shape=(Model.WIN_CHARS,))
             character_embeddings_layer = keras.layers.Embedding(
                                             input_dim=Model.MAX_ALLOWED_CHAR + 1,\
@@ -176,10 +177,7 @@ class Model:
             chars_lstm_layer = GRU(units=Model.GRU_CELL_SIZE, input_shape=(Model.MAX_CHARS_TOKENS, 300,))
             bi_lstm_layer_chars = keras.layers.Bidirectional(layer=chars_lstm_layer,\
                                         merge_mode="concat")(character_embeddings_layer)
-
             conc = keras.layers.concatenate([bi_lstm_layer_sent, word_emb, bi_lstm_layer_chars], axis=-1)
-        else:
-            conc = keras.layers.concatenate([bi_lstm_layer_sent, word_emb], axis=-1)
 
         d1 = keras.layers.Dense(Model.DENSES[0], activation='tanh')(conc)                                                 
         output = keras.layers.Dense(voc_size, activation='softmax')(d1)
@@ -214,6 +212,7 @@ if __name__ == "__main__":
     parser.add_argument('--small_run', dest='small_run', action='store_true', default=False)
     parser.add_argument('--name', dest="name", action="store", default="default")
     parser.add_argument('--no_chars', dest="no_chars", action="store_true")
+    parser.add_argument('--input_file', dest="input_file", action="store", default="inflected.csv")
     args = parser.parse_args()
 
     for k in args.__dict__:

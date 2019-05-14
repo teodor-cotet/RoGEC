@@ -2,3 +2,18 @@ typo generator:
     https://github.com/wsong/Typo-Distance/blob/master/typodistance.py
     -based on Knuth algorithm
     -insertion more likely than deletion
+
+from andrew paper:
+    -rare words?
+    -word level nn with fixed vocabulary - poorly suited for oov (years)
+    -character level works because you only need to copy inpuut -> output (attention si crucial + pyramid structure)
+    -combine with a language model (reranker)
+    -controlling precision: 
+    -multiple way to correct a sentence -> blue not accuracy
+    -synthetic errors:  article or determiner errors and noun number errors
+    -rich morpholofy -> character levels
+    -evaluated on how well its proposed corrections or edits match the gold-standard edits
+    -scores for n-grams to detect errors
+
+
+sent_gru + word + predict word:
