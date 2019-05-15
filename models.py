@@ -127,7 +127,7 @@ class Model:
                     inn[Model.MAX_SENT_TOKENS - j - 1][:] = np.float32([0] * 300)
                 else:
                     try:
-                        inn[Model.MAX_SENT_TOKENS - i - 1][:] = np.float32(self.fasttext.wv[token])
+                        inn[Model.MAX_SENT_TOKENS - j - 1][:] = np.float32(self.fasttext.wv[token])
                     except:
                         inn[Model.MAX_SENT_TOKENS - j - 1][:] = np.float32([0] * 300)
 
