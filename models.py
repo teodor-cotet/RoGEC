@@ -112,6 +112,7 @@ class Model:
         return win_chars        
     
     def construct_input(self, in_tokens_sent, in_ww):
+        global args
         if args.small_run == False:
             self.fasttext = FastTextWrapper.load_fasttext_format(Model.FAST_TEXT)
         
@@ -156,6 +157,7 @@ class Model:
         return out
 
     def run_model(self):
+        global args
         text_in, wrong_words, correct_words, id2word, word2id = self.load_data(filename=args.input_file)
         voc_size = len(id2word)
 
@@ -197,7 +199,7 @@ class Model:
                     metrics=['accuracy'])
         print(model.summary())
         if args.no_chars == True:
-            train_inn = [train_inn[0], train_inn[1]]
+            train_inn = train_inn[:2]
         model.fit(train_inn,
 				  [train_out],
 				  batch_size=Model.BATCH_SIZE, 
