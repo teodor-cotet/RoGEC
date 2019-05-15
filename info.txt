@@ -19,7 +19,8 @@ sent_gru + word + predict word:
 
 
 inflected:
-    50k
+    dictionary: 50k
+    samples: 50k
     no_chars:
         Epoch 1/100
         59052/59052 [==============================] - 335s 6ms/sample - loss: 8.8443 - acc: 0.0219 - val_loss: 8.9247 - val_acc: 0.0226
@@ -220,7 +221,8 @@ inflected:
         59052/59052 [==============================] - 191s 3ms/sample - loss: 1.4537 - acc: 0.6479 - val_loss: 3.4420 - val_acc: 0.5142
 
 typo: 
-    500k
+    dictionary: 160k
+    samples: 500k
     all:
         Epoch 1/100:
         488072/488072 [==============================] - 3969s 8ms/sample - loss: 8.6454 - acc: 0.0311 - val_loss: 8.6699 - val_acc: 0.0332
@@ -245,5 +247,6 @@ typo:
         Epoch 11/100
         488072/488072 [==============================] - 3646s 7ms/sample - loss: 1.2699 - acc: 0.7927 - val_loss: 2.2287 - val_acc: 0.7334
         ....TODO
+    without_chars:
 
 

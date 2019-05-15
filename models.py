@@ -133,16 +133,11 @@ class Model:
 
                 if token == in_ww[i]:
                     char_w = self.construct_window_chars(sample, pos_token)
+                    try:
+                        w_emb = np.float32(self.fasttext.wv[token])
+                    except:
+                        w_emb = np.float32([0] * 300)   
                 pos_token += len(token) + 1
-
-            if args.small_run == False:
-                try:
-                    w_emb = np.float32(self.fasttext.wv[token])
-                except:
-                    w_emb = np.float32([0] * 300)
-            else:
-                w_emb = np.float32([0] * 300)
-
             in_emb_ww.append(w_emb)
             inputs_sent.append(inn)
             chars_wind.append(char_w)
