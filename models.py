@@ -136,7 +136,7 @@ class Model:
                     try:
                         w_emb = np.float32(self.fasttext.wv[token])
                     except:
-                        w_emb = np.float32([0] * 300)   
+                        w_emb = np.float32([0] * 300)
                 pos_token += len(token) + 1
             in_emb_ww.append(w_emb)
             inputs_sent.append(inn)

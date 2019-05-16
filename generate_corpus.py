@@ -16,6 +16,7 @@ sys.path.insert(0, '/home/teo/repos/Readerbench-python/')
 from rb.parser.spacy_parser import SpacyParser
 from rb.core.lang import Lang
 from rb.core.document import Document
+
 import random
 import string
 from typodistance import typoGenerator
@@ -45,7 +46,7 @@ class CorpusGenerator():
         
         self.parser = SpacyParser.get_instance().get_model(Lang.RO)
         #self.fasttext = FastText.load(CorpusGenerator.FAST_TEXT)
-        self.fasttext = FastTextWrapper.load_fasttext_format(CorpusGenerator.FAST_TEXT)
+        #self.fasttext = FastTextWrapper.load_fasttext_format(CorpusGenerator.FAST_TEXT)
                 
     def split_sentences(self, fileName: str) -> Iterable[List[str]]:
         # sentences = []
@@ -62,13 +63,19 @@ class CorpusGenerator():
                 typo = random.choice([x for x in typoGenerator(text_token, 2)][1:])
                 return typo
             elif mistake_type is Mistake.INFLECTED:
-                candidates = self.fasttext.similar_by_word(token.lemma_, topn=200)
+                # candidates = self.fasttext.similar_by_word(token.lemma_, topn=200)
+                if token.text not in self.word_to_lemma[token.text]:
+                    lemma = token.lemma_
+                else:
+                    lemma = self.word_to_lemma[token.text]
 
-                for fast_token, coss in candidates:
-                    #print(self.parser(fast_token)[0].lemma_)
-                    if self.parser(fast_token)[0].lemma_ == token.lemma_ and fast_token != token.text:
-                        #print(fast_token, token)
-                        return fast_token
+                if lemma in self.lemma_to_words:
+                    candidates = self.lemma_to_words[lemma]
+                    potential = random.choice(candidates)
+                    if potential != token.text:
+                        return potential
+                else:
+                    print(lemma, token.text, 'y')
             return None
         except:
             return None
@@ -79,14 +86,37 @@ class CorpusGenerator():
         text = "".join([CorpusGenerator.CORRECT_DIACS[c] if c in CorpusGenerator.CORRECT_DIACS else c for c in list_text])
         return text.lower()
 
+    def construct_lemma_dict(self, lemma_file="wordlists/lemmas_ro.txt"):
+        self.word_to_lemma = {}
+        self.lemma_to_words = {}
+
+        with open(lemma_file, 'r') as f:
+            for line in f:
+                line = line.split()
+                line[0] = line[0].strip()
+                line[1] = line[1].strip()
+                if len(line) != 2:
+                    continue
+                self.word_to_lemma[line[0]] = line[1]
+                if line[1] not in self.lemma_to_words:
+                    self.lemma_to_words[line[1]] = [line[0]]
+                else:
+                    self.lemma_to_words[line[1]].append(line[0])
+        print('lemmas: {}'.format(len(self.lemma_to_words)))
+        print('words: {}'.format(len(self.word_to_lemma)))
+
     def generate(self):
+        self.construct_lemma_dict() 
         lines = []
         for ffile in self.files:
             for i, sent in enumerate(self.split_sentences(ffile)):
                 line = []
-                print(len(lines))
-                if len(lines) > 1000000:
+                if len(lines) % 100 == 0:
+                    print(len(lines))
+
+                if len(lines) > 1e6:
                     break
+
                 sent = self.clean_text(sent)
                 docs_ro = self.parser(sent)
                 tokens = [token for token in docs_ro]
@@ -99,10 +129,12 @@ class CorpusGenerator():
                             index = random.randint(0, len(tokens) - 1)
                             tagg = str(tokens[index].tag_)
                             if (tagg.startswith("P") or tagg.startswith("COMMA")
-                                or tagg.startswith("DASH") or tagg.startswith("COLON")): # punctuation
+                                or tagg.startswith("DASH") or tagg.startswith("COLON")
+                                or tagg.startswith("QUEST") or tagg.startswith("HELLIP")
+                                or tagg.startswith("DBLQ") or tagg.startswith("EXCL")): # punctuation
                                 count_tries += 1
                                 continue
-                            text_tok = self.modify_word(tokens[index], Mistake.TYPO)
+                            text_tok = self.modify_word(tokens[index], Mistake.INFLECTED)
                             if text_tok is not None:
                                 text_tokens[index] = text_tok
                                 sent3 = " ".join(text_tokens)
@@ -121,7 +153,7 @@ class CorpusGenerator():
                 if len(line) > 1:
                     lines.append(line)
         print(len(lines))
-        with open('typos.csv', 'w') as writeFile:
+        with open('inflected_2.csv', 'w') as writeFile:
             writer = csv.writer(writeFile)
             writer.writerows(lines)  
         # print(self.files)
@@ -131,4 +163,4 @@ class CorpusGenerator():
 if __name__ == "__main__":
     corpusGenerator = CorpusGenerator()
     corpusGenerator.generate()
-    
+    #corpusGenerator.generate()
