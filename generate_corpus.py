@@ -11,7 +11,8 @@ from gensim.models import FastText
 from gensim.models.wrappers import FastText as FastTextWrapper
 import sys
 import csv
-sys.path.insert(0, '/home/teo/repos/Readerbench-python/')
+import argparse
+sys.path.insert(0, '/home/teo/projects/Readerbench-python/')
 
 from rb.parser.spacy_parser import SpacyParser
 from rb.core.lang import Lang
@@ -37,6 +38,7 @@ class CorpusGenerator():
     MAX_SENT_TOKENS = 18
     #FAST_TEXT = "/home/teo/projects/readme-models/models/fasttext_fb/wiki.ro"
     FAST_TEXT = "/home/teo/repos/langcorrections/fasttext_fb/wiki.ro"
+    GENERATE = 1e3
 
     def __init__(self):
         self.files = []
@@ -46,7 +48,7 @@ class CorpusGenerator():
         
         self.parser = SpacyParser.get_instance().get_model(Lang.RO)
         #self.fasttext = FastText.load(CorpusGenerator.FAST_TEXT)
-        #self.fasttext = FastTextWrapper.load_fasttext_format(CorpusGenerator.FAST_TEXT)
+        self.fasttext = FastTextWrapper.load_fasttext_format(CorpusGenerator.FAST_TEXT)
                 
     def split_sentences(self, fileName: str) -> Iterable[List[str]]:
         # sentences = []
@@ -74,8 +76,6 @@ class CorpusGenerator():
                     potential = random.choice(candidates)
                     if potential != token.text:
                         return potential
-                else:
-                    print(lemma, token.text, 'y')
             return None
         except:
             return None
@@ -93,47 +93,83 @@ class CorpusGenerator():
         with open(lemma_file, 'r') as f:
             for line in f:
                 line = line.split()
-                line[0] = line[0].strip()
-                line[1] = line[1].strip()
                 if len(line) != 2:
                     continue
+
+                line[0] = self.clean_text(line[0].strip())
+                line[1] = self.clean_text(line[1].strip())
+               
                 self.word_to_lemma[line[0]] = line[1]
+                self.word_to_lemma[line[1]] = line[1]
+
                 if line[1] not in self.lemma_to_words:
                     self.lemma_to_words[line[1]] = [line[0]]
                 else:
                     self.lemma_to_words[line[1]].append(line[0])
+                
+                if line[1] not in self.lemma_to_words:
+                    self.lemma_to_words[line[1]] = [line[1]]
+                else:
+                    self.lemma_to_words[line[1]].append(line[1])
+
         print('lemmas: {}'.format(len(self.lemma_to_words)))
         print('words: {}'.format(len(self.word_to_lemma)))
 
+    def construct_dict(self, dict_file="wordlists/dict_ro (1).txt"):
+         self.dict = set()
+         with open(dict_file, 'r') as f:
+               for line in f:
+                   line = line.strip()
+                   self.dict.add(line)
+
+    def is_not_word(self, tagg):
+        return (tagg.startswith("P") or tagg.startswith("COMMA")
+                                or tagg.startswith("DASH") or tagg.startswith("COLON")
+                                or tagg.startswith("QUEST") or tagg.startswith("HELLIP")
+                                or tagg.startswith("DBLQ") or tagg.startswith("EXCL"))
     def generate(self):
-        self.construct_lemma_dict() 
+        global args
+        self.construct_lemma_dict()
+        #self.construct_dict()
         lines = []
         for ffile in self.files:
+            if len(lines) > CorpusGenerator.GENERATE:
+                break
+
             for i, sent in enumerate(self.split_sentences(ffile)):
                 line = []
                 if len(lines) % 100 == 0:
                     print(len(lines))
 
-                if len(lines) > 1e6:
+                if len(lines) > CorpusGenerator.GENERATE:
                     break
 
                 sent = self.clean_text(sent)
                 docs_ro = self.parser(sent)
                 tokens = [token for token in docs_ro]
+
+                # nr of words out of dictionary
+                cnt_out_of_dict = 0
+                for token in tokens:
+                    tagg = str(token.tag_)
+                    if  self.is_not_word(tagg) == False and token.text not in self.fasttext.wv.vocab:
+                        cnt_out_of_dict += 1
+                        print(token.text)
+
                 text_tokens = [token.text for token in docs_ro]
                 sent2 = " ".join(text_tokens)
+
                 try:
-                    if len(tokens) >= CorpusGenerator.MIN_SENT_TOKENS and len(tokens) <= CorpusGenerator.MAX_SENT_TOKENS:
+                    if (len(tokens) >= CorpusGenerator.MIN_SENT_TOKENS and len(tokens) <= CorpusGenerator.MAX_SENT_TOKENS
+                    and cnt_out_of_dict == 0):
                         count_tries = 0
                         while count_tries < 20:
                             index = random.randint(0, len(tokens) - 1)
                             tagg = str(tokens[index].tag_)
-                            if (tagg.startswith("P") or tagg.startswith("COMMA")
-                                or tagg.startswith("DASH") or tagg.startswith("COLON")
-                                or tagg.startswith("QUEST") or tagg.startswith("HELLIP")
-                                or tagg.startswith("DBLQ") or tagg.startswith("EXCL")): # punctuation
+                            if self.is_not_word(tagg): # punctuation
                                 count_tries += 1
                                 continue
+
                             text_tok = self.modify_word(tokens[index], Mistake.INFLECTED)
                             if text_tok is not None:
                                 text_tokens[index] = text_tok
@@ -152,8 +188,7 @@ class CorpusGenerator():
                   
                 if len(line) > 1:
                     lines.append(line)
-        print(len(lines))
-        with open('inflected_2.csv', 'w') as writeFile:
+        with open(args.output, 'w') as writeFile:
             writer = csv.writer(writeFile)
             writer.writerows(lines)  
         # print(self.files)
@@ -161,6 +196,13 @@ class CorpusGenerator():
         #     print(x)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser.add_argument('--output', dest='output', action='store', default="out.csv")
+    args = parser.parse_args()
+
+    for k in args.__dict__:
+        if args.__dict__[k] is not None:
+            print(k, '->', args.__dict__[k])
     corpusGenerator = CorpusGenerator()
     corpusGenerator.generate()
     #corpusGenerator.generate()
