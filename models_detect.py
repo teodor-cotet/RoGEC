@@ -34,7 +34,6 @@ import argparse
 args = None
 
 
-from generate_corpus import CorpusGenerator 
 
 
 class Model:
@@ -51,6 +50,13 @@ class Model:
     BATCH_SIZE = 64
     DENSES = [128]
     EMB_CHARS_SIZE = 28
+
+    CORRECT_DIACS = {
+        "ş": "ș",
+        "Ş": "Ș",
+        "ţ": "ț",
+        "Ţ": "Ț",
+    }
 
 
     def __init__(self): 
@@ -96,7 +102,7 @@ class Model:
     def clean_text(self, text: str):
         list_text = list(text)
         # some cleaning correct diacritics + eliminate \
-        text = "".join([CorpusGenerator.CORRECT_DIACS[c] if c in CorpusGenerator.CORRECT_DIACS else c for c in list_text])
+        text = "".join([Model.CORRECT_DIACS[c] if c in Model.CORRECT_DIACS else c for c in list_text])
         return text.lower()
          
     def construct_lemma_dict(self, lemma_file="wordlists/lemmas_ro.txt"):
