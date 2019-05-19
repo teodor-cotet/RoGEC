@@ -12,7 +12,7 @@ from gensim.models.wrappers import FastText as FastTextWrapper
 import sys
 import csv
 import argparse
-sys.path.insert(0, '/home/teo/projects/Readerbench-python/')
+sys.path.insert(0, '/home/teo/repos/Readerbench-python/')
 
 from rb.parser.spacy_parser import SpacyParser
 from rb.core.lang import Lang
@@ -38,9 +38,16 @@ class CorpusGenerator():
     MAX_SENT_TOKENS = 18
     #FAST_TEXT = "/home/teo/projects/readme-models/models/fasttext_fb/wiki.ro"
     FAST_TEXT = "/home/teo/repos/langcorrections/fasttext_fb/wiki.ro"
-    GENERATE = 1e3
+    GENERATE = 1e6
+    TASK = Mistake.INFLECTED
 
     def __init__(self):
+        global args
+        if args.task == "i":
+            CorpusGenerator.TASK = Mistake.INFLECTED
+        else:
+            CorpusGenerator.TASK = Mistake.TYPO
+
         self.files = []
         for f in listdir(CorpusGenerator.PATH_RAW_CORPUS):
             if isfile(join(CorpusGenerator.PATH_RAW_CORPUS, f)) and f.endswith(".txt"):
@@ -65,7 +72,6 @@ class CorpusGenerator():
                 typo = random.choice([x for x in typoGenerator(text_token, 2)][1:])
                 return typo
             elif mistake_type is Mistake.INFLECTED:
-                # candidates = self.fasttext.similar_by_word(token.lemma_, topn=200)
                 if token.text not in self.word_to_lemma[token.text]:
                     lemma = token.lemma_
                 else:
@@ -86,6 +92,9 @@ class CorpusGenerator():
         text = "".join([CorpusGenerator.CORRECT_DIACS[c] if c in CorpusGenerator.CORRECT_DIACS else c for c in list_text])
         return text.lower()
 
+    def construct_connectors(self, connectors_file="wordlists/connectives_ro"):
+        pass
+        
     def construct_lemma_dict(self, lemma_file="wordlists/lemmas_ro.txt"):
         self.word_to_lemma = {}
         self.lemma_to_words = {}
@@ -126,7 +135,16 @@ class CorpusGenerator():
         return (tagg.startswith("P") or tagg.startswith("COMMA")
                                 or tagg.startswith("DASH") or tagg.startswith("COLON")
                                 or tagg.startswith("QUEST") or tagg.startswith("HELLIP")
-                                or tagg.startswith("DBLQ") or tagg.startswith("EXCL"))
+                                or tagg.startswith("DBLQ") or tagg.startswith("EXCL")
+                                or tagg.startswith("X"))
+
+    def not_good_for_infl(self, tagg):
+        return (tagg.startswith("P") or tagg.startswith("COMMA")
+                                or tagg.startswith("DASH") or tagg.startswith("COLON")
+                                or tagg.startswith("QUEST") or tagg.startswith("HELLIP")
+                                or tagg.startswith("DBLQ") or tagg.startswith("EXCL")
+                                or tagg.startswith("X") or tagg.startswith("Csssp")
+                                or tagg.startswith("Qz")or tagg.startswith("Rp"))
     def generate(self):
         global args
         self.construct_lemma_dict()
@@ -154,7 +172,7 @@ class CorpusGenerator():
                     tagg = str(token.tag_)
                     if  self.is_not_word(tagg) == False and token.text not in self.fasttext.wv.vocab:
                         cnt_out_of_dict += 1
-                        print(token.text)
+                        #print(token.text)
 
                 text_tokens = [token.text for token in docs_ro]
                 sent2 = " ".join(text_tokens)
@@ -166,11 +184,11 @@ class CorpusGenerator():
                         while count_tries < 20:
                             index = random.randint(0, len(tokens) - 1)
                             tagg = str(tokens[index].tag_)
-                            if self.is_not_word(tagg): # punctuation
+                            if CorpusGenerator.TASK is Mistake.INFLECTED and self.not_good_for_infl(tagg) == True: # punctuation
                                 count_tries += 1
                                 continue
 
-                            text_tok = self.modify_word(tokens[index], Mistake.INFLECTED)
+                            text_tok = self.modify_word(tokens[index], CorpusGenerator.TASK)
                             if text_tok is not None:
                                 text_tokens[index] = text_tok
                                 sent3 = " ".join(text_tokens)
@@ -198,6 +216,7 @@ class CorpusGenerator():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('--output', dest='output', action='store', default="out.csv")
+    parser.add_argument('--task', dest='task', action='store', default="i")
     args = parser.parse_args()
 
     for k in args.__dict__:
