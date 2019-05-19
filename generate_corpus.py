@@ -12,7 +12,7 @@ from gensim.models.wrappers import FastText as FastTextWrapper
 import sys
 import csv
 import argparse
-sys.path.insert(0, '/home/teo/repos/Readerbench-python/')
+sys.path.insert(0, '/home/teo/projects/Readerbench-python/')
 
 from rb.parser.spacy_parser import SpacyParser
 from rb.core.lang import Lang
