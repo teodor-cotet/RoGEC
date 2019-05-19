@@ -42,7 +42,7 @@ class Model:
     # odd
     WIN_CHARS = 29
     GRU_CELL_SIZE = 64
-    PATIENCE = 8
+    PATIENCE = 6
     EPOCHS = 100
     BATCH_SIZE = 64
     DENSES = [128]
@@ -219,7 +219,7 @@ if __name__ == "__main__":
     parser.add_argument('--small_run', dest='small_run', action='store_true', default=False)
     parser.add_argument('--name', dest="name", action="store", default="default")
     parser.add_argument('--no_chars', dest="no_chars", action="store_true")
-    parser.add_argument('--input_file', dest="input_file", action="store", default="inflected.csv")
+    parser.add_argument('--input_file', dest="input_file", action="store", default="infl.csv")
     parser.add_argument('--only_word', dest="only_word", action="store_true", default=False)
     args = parser.parse_args()
 

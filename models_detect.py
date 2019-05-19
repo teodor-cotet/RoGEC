@@ -47,7 +47,7 @@ class Model:
     WIN_CHARS = 29
     GRU_CELL_SIZE = 64
     PATIENCE = 4
-    EPOCHS = 1
+    EPOCHS = 100
     BATCH_SIZE = 64
     DENSES = [128]
     EMB_CHARS_SIZE = 28
@@ -262,7 +262,7 @@ class Model:
                 bi_lstm_layer_chars = keras.layers.Bidirectional(layer=chars_lstm_layer,\
                                             merge_mode="concat")(character_embeddings_layer)
                 conc = keras.layers.concatenate([bi_lstm_layer_sent, word_emb, bi_lstm_layer_chars], axis=-1)
-                
+
         conc = keras.layers.Dropout(0.1)(conc)
         d1 = keras.layers.Dense(Model.DENSES[0], activation='tanh')(conc)                                                 
         output = keras.layers.Dense(2, activation='softmax')(d1)
