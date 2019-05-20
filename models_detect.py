@@ -82,7 +82,9 @@ class Model:
                     continue
                 if args.small_run == True and jj > 1000:
                     continue
-                    
+                if jj > 300e3:
+                    continue
+
                 for token in out_tokens:
                     if token not in word2id:
                         word2id[token] = count
@@ -137,7 +139,7 @@ class Model:
 
     def split_dataset(self, text_in, wrong_words, correct_words):
         n = len(text_in)
-        n1 = int(n * 0.99)
+        n1 = int(n * 0.97)
 
         return text_in[:n1], wrong_words[:n1], correct_words[:n1],\
                 text_in[n1:], wrong_words[n1:], correct_words[n1:]
@@ -269,7 +271,7 @@ class Model:
                                             merge_mode="concat")(character_embeddings_layer)
                 conc = keras.layers.concatenate([bi_lstm_layer_sent, word_emb, bi_lstm_layer_chars], axis=-1)
 
-        conc = keras.layers.Dropout(0.1)(conc)
+        conc = keras.layers.Dropout(0.2)(conc)
         d1 = keras.layers.Dense(Model.DENSES[0], activation='tanh')(conc)                                                 
         output = keras.layers.Dense(2, activation='softmax')(d1)
         train_inn, train_out, _, _, _= self.construct_input(train_in, train_ww, train_cw)
@@ -303,16 +305,40 @@ class Model:
                   callbacks=callbacks)
 
         with open(args.test, "w") as g:
+            tp, tn, fp, fn = 0, 0, 0, 0
             test_inn, test_out, ins_cw, ins_ww, sent = self.construct_input(test_in, test_ww, test_cw, do_shuffle=False)
+            print(len(test_inn))
             for i in range(len(test_inn[0])):
-                in1 = test_inn[0][i].reshape((1, Model.MAX_SENT_TOKENS, -1))
-                in2 = test_inn[1][i].reshape((1, -1))
-                in3 = test_inn[2][i].reshape((1, -1))
-                inn = [in1, in2, in3]
-
+                if args.only_word == True:
+                    in1 = test_inn[1][i].reshape((1, -1))
+                    inn = [in1]
+                else:
+                    in1 = test_inn[0][i].reshape((1, Model.MAX_SENT_TOKENS, -1))
+                    in2 = test_inn[1][i].reshape((1, -1))
+                    in3 = test_inn[2][i].reshape((1, -1))
+                    inn = [in1, in2, in3]
                 p = model.predict(x=inn, batch_size=None, steps=1)[0]
-                print(" ".join(sent[i]), ins_ww[i], ins_cw[i], test_out[i], np.argmax(p), file=g)
+                if np.argmax(test_out[i]) == 1:
+                    if np.argmax(p) == 1:
+                        tp += 1
+                    else:
+                        fp += 1
+                else:
+                    if np.argmax(p) == 0:
+                        tn += 1
+                    else:
+                        fn += 1
 
+                print(" ".join(sent[i]), ins_ww[i], ins_cw[i], test_out[i], np.argmax(p), file=g)
+        print('tp: {}, tn: {}, fp: {}, fn: {}', tp, tn, fp, fn)
+        if (tp + fp) != 0 and (tp + fn) != 0:
+            precision =  tp / (tp + fp)
+            recall = tp / (tp + fn)
+            beta = 0.5
+            fscore = (1+beta**2) * ((precision * recall) / ((beta**2)*precision + recall))
+        else:
+            precision, recall, fscore = 0, 0, 0
+        print('precision: {}, recall: {}, f1score: {}'.format(precision, recall, fscore))
         model.save(args.name + '.h5')
 
 if __name__ == "__main__":
@@ -320,7 +346,7 @@ if __name__ == "__main__":
     parser.add_argument('--small_run', dest='small_run', action='store_true', default=False)
     parser.add_argument('--name', dest="name", action="store", default="default")
     parser.add_argument('--no_chars', dest="no_chars", action="store_true")
-    parser.add_argument('--input_file', dest="input_file", action="store", default="inflected.csv")
+    parser.add_argument('--input_file', dest="input_file", action="store", default="infl.csv")
     parser.add_argument('--only_word', dest="only_word", action="store_true", default=False)
     parser.add_argument('--test', dest="test", action="store", default="test.txt")
     args = parser.parse_args()
