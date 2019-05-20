@@ -48,7 +48,7 @@ class Model:
     PATIENCE = 4
     EPOCHS = 100
     BATCH_SIZE = 64
-    DENSES = [128]
+    DENSES = [128, 64]
     EMB_CHARS_SIZE = 28
 
     CORRECT_DIACS = {
@@ -270,9 +270,11 @@ class Model:
                 bi_lstm_layer_chars = keras.layers.Bidirectional(layer=chars_lstm_layer,\
                                             merge_mode="concat")(character_embeddings_layer)
                 conc = keras.layers.concatenate([bi_lstm_layer_sent, word_emb, bi_lstm_layer_chars], axis=-1)
-
+                
         conc = keras.layers.Dropout(0.2)(conc)
-        d1 = keras.layers.Dense(Model.DENSES[0], activation='tanh')(conc)                                                 
+        conc = keras.layers.Dense(Model.DENSES[0], activation='tanh')(conc)
+        conc = keras.layers.Dropout(0.1)(conc)
+        d1 = keras.layers.Dense(Model.DENSES[1], activation='tanh')(conc)                                                 
         output = keras.layers.Dense(2, activation='softmax')(d1)
         train_inn, train_out, _, _, _= self.construct_input(train_in, train_ww, train_cw)
         #train_out = self.construct_output(train_cw, word2id)
