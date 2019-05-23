@@ -250,61 +250,64 @@ class Model:
 
         train_in, train_ww, train_cw, test_in, test_ww, test_cw = \
             self.split_dataset(text_in, wrong_words, correct_words)
-        if args.only_word == False:
-            sentence_embeddings_layer = Input(shape=((Model.MAX_SENT_TOKENS, 300,)))
-            sentence_lstm_layer = GRU(units=Model.GRU_CELL_SIZE, input_shape=(Model.MAX_SENT_TOKENS, 300,))
-            bi_lstm_layer_sent = keras.layers.Bidirectional(layer=sentence_lstm_layer,\
-                                        merge_mode="concat")(sentence_embeddings_layer)
-        word_emb = Input(shape=(300,))
-        if args.only_word == True:
-            conc = word_emb
-        else:
-            if args.no_chars == True:
-                conc = keras.layers.concatenate([bi_lstm_layer_sent, word_emb], axis=-1)
+        if args.no_train == False:
+            if args.only_word == False:
+                sentence_embeddings_layer = Input(shape=((Model.MAX_SENT_TOKENS, 300,)))
+                sentence_lstm_layer = GRU(units=Model.GRU_CELL_SIZE, input_shape=(Model.MAX_SENT_TOKENS, 300,))
+                bi_lstm_layer_sent = keras.layers.Bidirectional(layer=sentence_lstm_layer,\
+                                            merge_mode="concat")(sentence_embeddings_layer)
+            word_emb = Input(shape=(300,))
+            if args.only_word == True:
+                conc = word_emb
             else:
-                input_character_window = keras.layers.Input(shape=(Model.WIN_CHARS,))
-                character_embeddings_layer = keras.layers.Embedding(
-                                                input_dim=Model.MAX_ALLOWED_CHAR + 1,\
-                                                output_dim=Model.EMB_CHARS_SIZE)(input_character_window)
-                chars_lstm_layer = GRU(units=Model.GRU_CELL_SIZE, input_shape=(Model.MAX_CHARS_TOKENS, 300,))
-                bi_lstm_layer_chars = keras.layers.Bidirectional(layer=chars_lstm_layer,\
-                                            merge_mode="concat")(character_embeddings_layer)
-                conc = keras.layers.concatenate([bi_lstm_layer_sent, word_emb, bi_lstm_layer_chars], axis=-1)
-                
-        conc = keras.layers.Dropout(0.2)(conc)
-        conc = keras.layers.Dense(Model.DENSES[0], activation='tanh')(conc)
-        conc = keras.layers.Dropout(0.1)(conc)
-        d1 = keras.layers.Dense(Model.DENSES[1], activation='tanh')(conc)                                                 
-        output = keras.layers.Dense(2, activation='softmax')(d1)
-        train_inn, train_out, _, _, _= self.construct_input(train_in, train_ww, train_cw)
-        #train_out = self.construct_output(train_cw, word2id)
-        callbacks = [keras.callbacks.EarlyStopping(monitor='val_loss', patience=Model.PATIENCE)]
+                if args.no_chars == True:
+                    conc = keras.layers.concatenate([bi_lstm_layer_sent, word_emb], axis=-1)
+                else:
+                    input_character_window = keras.layers.Input(shape=(Model.WIN_CHARS,))
+                    character_embeddings_layer = keras.layers.Embedding(
+                                                    input_dim=Model.MAX_ALLOWED_CHAR + 1,\
+                                                    output_dim=Model.EMB_CHARS_SIZE)(input_character_window)
+                    chars_lstm_layer = GRU(units=Model.GRU_CELL_SIZE, input_shape=(Model.MAX_CHARS_TOKENS, 300,))
+                    bi_lstm_layer_chars = keras.layers.Bidirectional(layer=chars_lstm_layer,\
+                                                merge_mode="concat")(character_embeddings_layer)
+                    conc = keras.layers.concatenate([bi_lstm_layer_sent, word_emb, bi_lstm_layer_chars], axis=-1)
+                    
+            conc = keras.layers.Dropout(0.2)(conc)
+            conc = keras.layers.Dense(Model.DENSES[0], activation='tanh')(conc)
+            conc = keras.layers.Dropout(0.1)(conc)
+            d1 = keras.layers.Dense(Model.DENSES[1], activation='tanh')(conc)                                                 
+            output = keras.layers.Dense(2, activation='softmax')(d1)
+            train_inn, train_out, _, _, _= self.construct_input(train_in, train_ww, train_cw)
+            #train_out = self.construct_output(train_cw, word2id)
+            callbacks = [keras.callbacks.EarlyStopping(monitor='val_loss', patience=Model.PATIENCE)]
 
-        if args.only_word == True:
-            inn = [word_emb]
-        else:
-            if args.no_chars == True:
-                inn = [sentence_embeddings_layer, word_emb]
+            if args.only_word == True:
+                inn = [word_emb]
             else:
-                inn = [sentence_embeddings_layer, word_emb, input_character_window]
+                if args.no_chars == True:
+                    inn = [sentence_embeddings_layer, word_emb]
+                else:
+                    inn = [sentence_embeddings_layer, word_emb, input_character_window]
 
-        model = keras.models.Model(inputs=inn,
-								   outputs=output)
-        model.compile(optimizer='adam',\
-                    loss='categorical_crossentropy',\
-                    metrics=['accuracy'])
-        print(model.summary())
-        if args.no_chars == True:
-            train_inn = train_inn[:2]
-        if args.only_word == True:
-            train_inn = train_inn[1:2]
+            model = keras.models.Model(inputs=inn,
+                                    outputs=output)
+            model.compile(optimizer='adam',\
+                        loss='categorical_crossentropy',\
+                        metrics=['accuracy'])
+            print(model.summary())
+            if args.no_chars == True:
+                train_inn = train_inn[:2]
+            if args.only_word == True:
+                train_inn = train_inn[1:2]
 
-        model.fit(train_inn,
-				  [train_out],
-				  batch_size=Model.BATCH_SIZE, 
-                  epochs=Model.EPOCHS, 
-                  validation_split=0.2,
-                  callbacks=callbacks)
+            model.fit(train_inn,
+                    [train_out],
+                    batch_size=Model.BATCH_SIZE, 
+                    epochs=Model.EPOCHS, 
+                    validation_split=0.2,
+                    callbacks=callbacks)
+        else:
+            model = keras.models.load_model(args.load)
 
         with open(args.test, "w") as g:
             tp, tn, fp, fn = 0, 0, 0, 0
@@ -350,7 +353,9 @@ if __name__ == "__main__":
     parser.add_argument('--no_chars', dest="no_chars", action="store_true")
     parser.add_argument('--input_file', dest="input_file", action="store", default="infl.csv")
     parser.add_argument('--only_word', dest="only_word", action="store_true", default=False)
-    parser.add_argument('--test', dest="test", action="store", default="test.txt")
+    parser.add_argument('--test', dest="test", action="store", default="test_precision.txt")
+    parser.add_argument('--no_train', dest="no_train", action="store_true", default=False)
+    parser.add_argument('--load', dest="load", action="store", default="infl_detect_all.h5")
     args = parser.parse_args()
 
     for k in args.__dict__:
