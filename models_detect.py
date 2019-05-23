@@ -323,7 +323,7 @@ class Model:
                     in3 = test_inn[2][i].reshape((1, -1))
                     inn = [in1, in2, in3]
                 p = model.predict(x=inn, batch_size=None, steps=1)[0]
-                if p[i][1] > args.precision_sure:
+                if p[1] > args.precision_sure:
                     predicted = 1
                 else:
                     predicted = 0
