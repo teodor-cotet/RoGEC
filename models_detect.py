@@ -80,7 +80,7 @@ class Model:
                 out_tokens = out.split()
                 if len(in_tokens) != len(out_tokens):
                     continue
-                if args.small_run == True and jj > 1000:
+                if args.small_run == True and jj > 10000:
                     continue
                 if jj > 300e3:
                     continue
@@ -323,13 +323,17 @@ class Model:
                     in3 = test_inn[2][i].reshape((1, -1))
                     inn = [in1, in2, in3]
                 p = model.predict(x=inn, batch_size=None, steps=1)[0]
+                if p[i][1] > args.precision_sure:
+                    predicted = 1
+                else:
+                    predicted = 0
                 if np.argmax(test_out[i]) == 1:
-                    if np.argmax(p) == 1:
+                    if predicted == 1:
                         tp += 1
                     else:
                         fp += 1
                 else:
-                    if np.argmax(p) == 0:
+                    if predicted == 0:
                         tn += 1
                     else:
                         fn += 1
@@ -356,6 +360,7 @@ if __name__ == "__main__":
     parser.add_argument('--test', dest="test", action="store", default="test_precision.txt")
     parser.add_argument('--no_train', dest="no_train", action="store_true", default=False)
     parser.add_argument('--load', dest="load", action="store", default="infl_detect_all.h5")
+    parser.add_argument('--precision_sure', dest="precision_sure", action="store", default=0.8, type=float)
     args = parser.parse_args()
 
     for k in args.__dict__:
