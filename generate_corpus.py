@@ -12,11 +12,8 @@ from gensim.models.wrappers import FastText as FastTextWrapper
 import sys
 import csv
 import argparse
-sys.path.insert(0, '/home/research/repos/Readerbench-python/')
 
-from rb.parser.spacy_parser import SpacyParser
-from rb.core.lang import Lang
-from rb.core.document import Document
+
 
 import random
 import string
@@ -45,9 +42,10 @@ class CorpusGenerator():
         global args
         if args.task == "i":
             CorpusGenerator.TASK = Mistake.INFLECTED
-        else:
+        elif args.task == 't':
             CorpusGenerator.TASK = Mistake.TYPO
-
+        else:
+            CorpusGenerator.TASK = Mistake.ALL
         self.files = []
         for f in listdir(CorpusGenerator.PATH_RAW_CORPUS):
             if isfile(join(CorpusGenerator.PATH_RAW_CORPUS, f)) and f.endswith(".txt"):
@@ -213,15 +211,23 @@ class CorpusGenerator():
         # for x in self.split_sentences(self.files[0]):
         #     print(x)
 
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('--output', dest='output', action='store', default="out.csv")
     parser.add_argument('--task', dest='task', action='store', default="i")
+    parser.add_argument('--rb_path', dest='rb_path', action='store', default="../readerbenchpy/")
     args = parser.parse_args()
 
     for k in args.__dict__:
         if args.__dict__[k] is not None:
             print(k, '->', args.__dict__[k])
+    sys.path.insert(0, args.rb_path)
+
+    from rb.parser.spacy_parser import SpacyParser
+    from rb.core.lang import Lang
+    from rb.core.document import Document
     corpusGenerator = CorpusGenerator()
     corpusGenerator.generate()
     #corpusGenerator.generate()

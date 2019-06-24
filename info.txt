@@ -17,7 +17,7 @@ from andrew paper:
 
 sent_gru + word + predict word:
 
-
+# this should be reruned as it was runed on a different corpus
 inflected:
     dictionary: 50k
     samples: 50k
@@ -250,7 +250,8 @@ typo:
     without_chars:
 
 
-
+new corpus:
+-----------------
 detect:
     inflected:
         all - dropout 0.1 100k examples
@@ -348,6 +349,13 @@ detect:
             tp: {}, tn: {}, fp: {}, fn: {} 57008 51258 5677 3418
             precision: 0.9094360692350643, recall: 0.9434349452222554, f1score: 0.9160383846564214
             Counter({1: 2026808, 0: 1812848})
+
+            fot other threshold:
+                thr  | prec  | rec   | f0.5
+                0.50   0.909   0.943   0.916
+                0.40   0.926   0.933   0.928
+                0.25   0.947   0.915   0.940
+                0.10   0.971   0.879   0.951
 
             architecture:
                 Layer (type)                    Output Shape         Param #     Connected to

@@ -10,8 +10,9 @@ from collections import Counter
 
 import tensorflow as tf
 from tensorflow import keras 
-from tensorflow.keras.layers import Dense, Dropout, Embedding, LSTM, Bidirectional, GRU, Input, concatenate, Reshape
-from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.layers import Dense, Dropout, Embedding, LSTM, Bidirectional, GRU, Input
+from tensorflow.keras.layers import TimeDistributed, concatenate, Reshape, RepeatVector
+from tensorflow.keras.models import Sequential
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.callbacks import ModelCheckpoint, LambdaCallback, Callback
@@ -50,6 +51,11 @@ class Model:
     BATCH_SIZE = 64
     DENSES = [128, 64]
     EMB_CHARS_SIZE = 28
+    MAX_CHAR = 1000
+    START_CHAR = 1000
+    END_CHAR = 1001
+    SRC_TEXT_CHAR_LENGTH = 300
+
 
     CORRECT_DIACS = {
         "ş": "ș",
@@ -66,16 +72,16 @@ class Model:
         set_session(tf.Session(config=config))
 
     # elasticsearch dump file
-    def load_data(self, filename='codeDuTravail.json'):
+    def load_data(self, filename):
         global args
         id2word, word2id = {}, {}
         count = 0
-        text_in, wrong_words, correct_words = [], [], []
-        with open(filename, "r") as csv_file:
+        text_in, text_out, wrong_words, correct_words = [], [], [], []
+        with open(filename, "r", encoding='utf-8') as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
             for jj, row in enumerate(csv_reader):
-                inn = row[1].lower()
-                out = row[0].lower()
+                inn = self.clean_text(row[1].lower())
+                out = self.clean_text(row[0].lower())
                 in_tokens = inn.split()
                 out_tokens = out.split()
                 if len(in_tokens) != len(out_tokens):
@@ -95,23 +101,27 @@ class Model:
                     # keep only if token does not repeat
                     if token != out_tokens[i] and cc[token] == 1:
                         text_in.append(in_tokens)
+                        text_out.append(out_tokens)
                         wrong_words.append(token)
                         correct_words.append(out_tokens[i])
         print(len(text_in))
         
-        return text_in, wrong_words, correct_words, id2word, word2id
+        return text_in, text_out, wrong_words, correct_words, id2word, word2id
     
     def clean_text(self, text: str):
         list_text = list(text)
-        # some cleaning correct diacritics + eliminate \
         text = "".join([Model.CORRECT_DIACS[c] if c in Model.CORRECT_DIACS else c for c in list_text])
+        # list_text = list(text)
+        # list_text = [c for c in text if ord(c) < Model.MAX_CHAR]
+        # text = "".join(list_text)
+        # some cleaning correct diacritics + eliminate \
         return text.lower()
          
     def construct_lemma_dict(self, lemma_file="wordlists/lemmas_ro.txt"):
         self.word_to_lemma = {}
         self.lemma_to_words = {}
 
-        with open(lemma_file, 'r') as f:
+        with open(lemma_file, 'r', encoding='utf-8') as f:
             for line in f:
                 line = line.split()
                 if len(line) != 2:
@@ -136,13 +146,12 @@ class Model:
         print('lemmas: {}'.format(len(self.lemma_to_words)))
         print('words: {}'.format(len(self.word_to_lemma)))
 
-
-    def split_dataset(self, text_in, wrong_words, correct_words):
+    def split_dataset(self, text_in, text_out, wrong_words, correct_words):
         n = len(text_in)
         n1 = int(n * 0.97)
 
-        return text_in[:n1], wrong_words[:n1], correct_words[:n1],\
-                text_in[n1:], wrong_words[n1:], correct_words[n1:]
+        return text_in[:n1], text_out[:n1], wrong_words[:n1], correct_words[:n1],\
+                text_in[n1:], text_out[:n1], wrong_words[n1:], correct_words[n1:]
 
     def construct_window_chars(self, sample, index):
         win_chars = []
@@ -159,6 +168,11 @@ class Model:
             win_chars.append(v1)
         return win_chars        
     
+    def construct_input_chars(self, in_tokens_sent, in_ww, in_cw):
+        global args
+
+        pass
+
     def construct_input(self, in_tokens_sent, in_ww, in_cw, do_shuffle=False):
         global args
 
@@ -242,35 +256,31 @@ class Model:
         out = keras.utils.to_categorical(out, num_classes=len(word2id))
         return out
 
-    def run_model(self):
+    def run_model_rnn(self):
         global args
         self.construct_lemma_dict()
-        text_in, wrong_words, correct_words, id2word, word2id = self.load_data(filename=args.input_file)
+        text_in, text_out, wrong_words, correct_words, id2word, word2id = self.load_data(filename=args.input_file)
         voc_size = len(id2word)
+        """load dataset"""
+        train_in, train_ww, train_cw, train_ww, test_in, test_ww, test_cw , test_ww = \
+            self.split_dataset(text_in, text_out, wrong_words, correct_words)
 
-        train_in, train_ww, train_cw, test_in, test_ww, test_cw = \
-            self.split_dataset(text_in, wrong_words, correct_words)
+        """ train """
         if args.no_train == False:
-            if args.only_word == False:
-                sentence_embeddings_layer = Input(shape=((Model.MAX_SENT_TOKENS, 300,)))
-                sentence_lstm_layer = GRU(units=Model.GRU_CELL_SIZE, input_shape=(Model.MAX_SENT_TOKENS, 300,))
-                bi_lstm_layer_sent = keras.layers.Bidirectional(layer=sentence_lstm_layer,\
-                                            merge_mode="concat")(sentence_embeddings_layer)
+            sentence_embeddings_layer = Input(shape=((Model.MAX_SENT_TOKENS, 300,)))
+            sentence_lstm_layer = GRU(units=Model.GRU_CELL_SIZE, input_shape=(Model.MAX_SENT_TOKENS, 300,))
+            bi_lstm_layer_sent = keras.layers.Bidirectional(layer=sentence_lstm_layer,\
+                                        merge_mode="concat")(sentence_embeddings_layer)
             word_emb = Input(shape=(300,))
-            if args.only_word == True:
-                conc = word_emb
-            else:
-                if args.no_chars == True:
-                    conc = keras.layers.concatenate([bi_lstm_layer_sent, word_emb], axis=-1)
-                else:
-                    input_character_window = keras.layers.Input(shape=(Model.WIN_CHARS,))
-                    character_embeddings_layer = keras.layers.Embedding(
-                                                    input_dim=Model.MAX_ALLOWED_CHAR + 1,\
-                                                    output_dim=Model.EMB_CHARS_SIZE)(input_character_window)
-                    chars_lstm_layer = GRU(units=Model.GRU_CELL_SIZE, input_shape=(Model.MAX_CHARS_TOKENS, 300,))
-                    bi_lstm_layer_chars = keras.layers.Bidirectional(layer=chars_lstm_layer,\
-                                                merge_mode="concat")(character_embeddings_layer)
-                    conc = keras.layers.concatenate([bi_lstm_layer_sent, word_emb, bi_lstm_layer_chars], axis=-1)
+
+            input_character_window = keras.layers.Input(shape=(Model.WIN_CHARS,))
+            character_embeddings_layer = keras.layers.Embedding(
+                                            input_dim=Model.MAX_ALLOWED_CHAR + 1,\
+                                            output_dim=Model.EMB_CHARS_SIZE)(input_character_window)
+            chars_lstm_layer = GRU(units=Model.GRU_CELL_SIZE, input_shape=(Model.MAX_CHARS_TOKENS, 300,))
+            bi_lstm_layer_chars = keras.layers.Bidirectional(layer=chars_lstm_layer,\
+                                        merge_mode="concat")(character_embeddings_layer)
+            conc = keras.layers.concatenate([bi_lstm_layer_sent, word_emb, bi_lstm_layer_chars], axis=-1)
                     
             conc = keras.layers.Dropout(0.2)(conc)
             conc = keras.layers.Dense(Model.DENSES[0], activation='tanh')(conc)
@@ -280,14 +290,7 @@ class Model:
             train_inn, train_out, _, _, _= self.construct_input(train_in, train_ww, train_cw)
             #train_out = self.construct_output(train_cw, word2id)
             callbacks = [keras.callbacks.EarlyStopping(monitor='val_loss', patience=Model.PATIENCE)]
-
-            if args.only_word == True:
-                inn = [word_emb]
-            else:
-                if args.no_chars == True:
-                    inn = [sentence_embeddings_layer, word_emb]
-                else:
-                    inn = [sentence_embeddings_layer, word_emb, input_character_window]
+            inn = [sentence_embeddings_layer, word_emb, input_character_window]
 
             model = keras.models.Model(inputs=inn,
                                     outputs=output)
@@ -295,10 +298,6 @@ class Model:
                         loss='categorical_crossentropy',\
                         metrics=['accuracy'])
             print(model.summary())
-            if args.no_chars == True:
-                train_inn = train_inn[:2]
-            if args.only_word == True:
-                train_inn = train_inn[1:2]
 
             model.fit(train_inn,
                     [train_out],
@@ -309,7 +308,8 @@ class Model:
         else:
             model = keras.models.load_model(args.load)
 
-        with open(args.test, "w") as g:
+        """ compute stats """
+        with open(args.test, "w", encoding='utf-8') as g:
             tp, tn, fp, fn = 0, 0, 0, 0
             test_inn, test_out, ins_cw, ins_ww, sent = self.construct_input(test_in, test_ww, test_cw, do_shuffle=False)
             print(len(test_inn))
@@ -349,15 +349,15 @@ class Model:
             precision, recall, fscore = 0, 0, 0
         print('precision: {}, recall: {}, f1score: {}'.format(precision, recall, fscore))
         model.save(args.name + '.h5')
-
+        
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('--small_run', dest='small_run', action='store_true', default=False)
     parser.add_argument('--name', dest="name", action="store", default="default")
-    parser.add_argument('--no_chars', dest="no_chars", action="store_true")
+    #parser.add_argument('--no_chars', dest="no_chars", action="store_true")
     parser.add_argument('--input_file', dest="input_file", action="store", default="infl.csv")
     parser.add_argument('--only_word', dest="only_word", action="store_true", default=False)
-    parser.add_argument('--test', dest="test", action="store", default="test_precision.txt")
+    parser.add_argument('--test_file', dest="test_file", action="store", default="test_precision.txt")
     parser.add_argument('--no_train', dest="no_train", action="store_true", default=False)
     parser.add_argument('--load', dest="load", action="store", default="infl_detect_all.h5")
     parser.add_argument('--precision_sure', dest="precision_sure", action="store", default=0.8, type=float)
@@ -368,5 +368,5 @@ if __name__ == "__main__":
             print(k, '->', args.__dict__[k])
 
     model = Model()
-    model.run_model()
+    model.run_model_rnn()
     

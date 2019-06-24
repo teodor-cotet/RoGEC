@@ -3,3 +3,11 @@ books/**
 *.tmp
 *.csv
 __pycache__/
+.keras/**
+*.d
+*.h5
+.*
+wordlists/*
+test_tf.py
+test_keras.py
+log.log

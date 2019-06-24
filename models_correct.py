@@ -42,8 +42,8 @@ class Model:
     # odd
     WIN_CHARS = 29
     GRU_CELL_SIZE = 64
-    PATIENCE = 6
-    EPOCHS = 100
+    PATIENCE = 60
+    EPOCHS = 400
     BATCH_SIZE = 64
     DENSES = [128]
     EMB_CHARS_SIZE = 28
@@ -61,7 +61,7 @@ class Model:
         id2word, word2id = {}, {}
         count = 0
         text_in, wrong_words, correct_words = [], [], []
-        with open(filename, "r") as csv_file:
+        with open(filename, "r", encoding='utf-8') as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
             for jj, row in enumerate(csv_reader):
                 inn = row[1].lower()
