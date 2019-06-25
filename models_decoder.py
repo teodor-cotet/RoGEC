@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import argparse
 import csv
 import json
@@ -40,11 +41,11 @@ class Model:
     FAST_TEXT = "fasttext_fb/wiki.ro"
 
     """ params of the model """
-    PATIENCE = 50
-    EPOCHS = 300
+    PATIENCE = 1000
+    EPOCHS = 2500
     BATCH_SIZE = 64
-    LATENT_DIM_RNN = 64
-    LATENT_DIM_CHARS = 20
+    LATENT_DIM_RNN = 90
+    LATENT_DIM_CHARS = 32
     MAX_LENGTH_DECODER = 110
 
     """ max char to keep """
