@@ -28,6 +28,7 @@ from tensorflow.keras.layers import (GRU, LSTM, Bidirectional, Dense, Dropout,
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.text import Tokenizer
+from parser import Parser
 
 args = None
 """ TODO:
@@ -54,7 +55,7 @@ class Model:
     END_CHAR = 300 + 1
     NR_CHARS = 300 + 2
 
-    SRC_TEXT_CHAR_LENGTH = 100
+    SRC_TEXT_CHAR_LENGTH = 150
     SMALL_RUN_SAMPLES = 1500
     TRAIN_DEV_DATASET_PERCENTAGE = 0.97
 
@@ -66,10 +67,11 @@ class Model:
     }
 
     def __init__(self): 
-        config = tf.ConfigProto()
-        #config.gpu_options.per_process_gpu_memory_fraction = 0.2
-        config.gpu_options.allow_growth = True
-        set_session(tf.Session(config=config))
+        pass
+        # config = tf.ConfigProto()
+        # #config.gpu_options.per_process_gpu_memory_fraction = 0.2
+        # config.gpu_options.allow_growth = True
+        # set_session(tf.Session(config=config))
 
     # elasticsearch dump file
     def load_data(self, filename):
@@ -150,7 +152,10 @@ class Model:
 
     def construct_input_output_chars(self, raw_in, raw_out, max_size):
         global args
-        all_samples_out_categorical, all_samples_in, all_samples_out_simple = [], [], []
+        """ all_samples_decoder_target_categorical us one timestep ahead of all_samples_decoder_input (teacher forcing)
+            it is also categorical 
+        """
+        all_samples_decoder_target_categorical, all_samples_in, all_samples_decoder_input = [], [], []
         for (rin, rout) in zip(raw_in, raw_out):
             """ in """
             chars_ids = [ord(c) for c in list(rin)]
@@ -159,17 +164,20 @@ class Model:
             """ out """
             chars_ids = [ord(c) for c in list(rout)]
             padded_out = self.pad_seq(chars_ids, max_size=max_size)
-            all_samples_out_simple.append(padded_out)
-            categorical_out = keras.utils.to_categorical(np.asarray(padded_out), num_classes=Model.NR_CHARS)
+            all_samples_decoder_input.append(padded_out)
+            #categorical_out = keras.utils.to_categorical(np.asarray(padded_out), num_classes=Model.NR_CHARS)
             sent_samples_out = []
 
-            for out in categorical_out:
-                if np.argmax(out) != Model.START_CHAR:
+            for out in padded_out:
+                """ skip the first character, because target decoder has to be 1 timestep ahead """
+                if out != Model.START_CHAR:
                     sent_samples_out.append(out)
-            sent_samples_out.append(keras.utils.to_categorical([0], num_classes=Model.NR_CHARS)[0])
+            """ append 0 to match sizes"""
+            #sent_samples_out.append(keras.utils.to_categorical([0], num_classes=Model.NR_CHARS)[0])
+            sent_samples_out.append(0)
             all_samples_in.append(inn)         
-            all_samples_out_categorical.append(np.asarray(sent_samples_out))
-        return all_samples_in, all_samples_out_simple, all_samples_out_categorical
+            all_samples_decoder_target_categorical.append(np.asarray(sent_samples_out))
+        return np.asarray(all_samples_in), np.asarray(all_samples_decoder_input), np.asarray(all_samples_decoder_target_categorical)
 
     def compute_predictions(self, input_seq):
         # Encode the input as state vectors.
@@ -302,7 +310,118 @@ class Model:
                 self.compute_predictions(input_seq)
         else:
            model = keras.models.load_model(args.load)
+
+    def filter_texts(self, texts):
+        filtered = []
+        for t1, t2 in texts:
+            keep = True
+            for c in t1:
+                if ord(c) >= Model.NR_CHARS:
+                    keep = False
+            for c in t2:
+                if ord(c) >= Model.NR_CHARS:
+                    keep = False
+            
+            if keep:
+                filtered.append((t1, t2))
+        return filtered
+
+    def eng_noiser(self):
+        parser = Parser()
+        train, test = parser.parse_lang_8()
+        train, test = self.filter_texts(train), self.filter_texts(test)
+
+        if args.small_run:
+            train, test = train[:100], test[:100]
+
+        train_raw_in, train_raw_out = [t1 for t1, _ in train], [t2 for _, t2 in train]
+        # model seq2seq
+        # encoder input model
+        encoder_inputs = Input(shape=(None,))
+        char_emb_encoder = Embedding(input_dim=Model.NR_CHARS, output_dim=Model.LATENT_DIM_CHARS, mask_zero=True, trainable=True)
+        embedded_encoder = char_emb_encoder(encoder_inputs)
+        """ LSTM has cell state and hidden (state) == output 
+            states used later, encoder_h == encoder_lstm  (last hidden states == output)
+            for full seq, call return_sequences==True
+        """
+        encoder_lstm, encoder_h, encoder_c = LSTM(Model.LATENT_DIM_RNN, return_state=True)(embedded_encoder)
+
+        encoder_states = [encoder_h, encoder_c]
+        # decoder output model, we define a new Input because is recursive
+        decoder_inputs = Input(shape=(None,))
+        char_emb_decoder = Embedding(input_dim=Model.NR_CHARS, output_dim=Model.LATENT_DIM_CHARS, mask_zero=True, trainable=True)
+        embedded_decoder = char_emb_decoder(decoder_inputs)
+        """ ret seququences return output (hidden) for each timestep, retur_state returns cell and hidden """
+        decoder_lstm = LSTM(Model.LATENT_DIM_RNN, return_sequences=True, return_state=True)
+        """ initial_state is the initial cell and initial hidden, which are initialized with the encoder output """
+        decoder_outputs, _, _ = decoder_lstm(embedded_decoder, initial_state=encoder_states)
+        decoder_dense = Dense(Model.NR_CHARS, activation='softmax')
+        decoder_outputs = decoder_dense(decoder_outputs)
+
+        model = keras.Model([encoder_inputs, decoder_inputs], decoder_outputs)
+
+        model.compile(loss='sparse_categorical_crossentropy', optimizer='adam')
+
+        encoder_input_data, decoder_input_data, decoder_output_data = \
+            self.construct_input_output_chars(raw_in=train_raw_in, raw_out=train_raw_out, 
+                                                max_size=Model.SRC_TEXT_CHAR_LENGTH)
+        if args.verbose:
+            print('Coding in/out info')
+            for (inn, outs, outc) in zip(encoder_input_data, decoder_input_data, decoder_output_data):
+                print('input seq: ', file=log)
+                print(inn, file=log)
+                print('input shape: ')
+                print(inn.shape, file=log)
+                print('input (decoder) seq:')
+                print(outs, file=log)
+                print('input (decoder) shape:')
+                print(outs.shape, file=log)
+                print('output (train) seq:')
+                print(outc, file=log)
+                print('output (train) shape:')
+                print(outc.shape, file=log)
+                break
+
+        callbacks = [keras.callbacks.EarlyStopping(monitor='val_loss', patience=Model.PATIENCE)]
+        print(model.summary())
+
         
+        encoder_input_data = np.asarray(encoder_input_data) #encoder_input_data.reshape((-1, Model.SRC_TEXT_CHAR_LENGTH), dtype='int32')
+        decoder_input_data = np.asarray(decoder_input_data) #decoder_input_data.reshape((-1, Model.SRC_TEXT_CHAR_LENGTH), dtype='int32')
+        decoder_output_data = np.asarray(decoder_output_data)
+        print(encoder_input_data.shape, decoder_input_data.shape, decoder_output_data.shape)
+
+        model.fit([encoder_input_data, decoder_input_data],
+                decoder_output_data,
+                batch_size=Model.BATCH_SIZE, 
+                epochs=Model.EPOCHS, 
+                validation_split=0.2,
+                callbacks=callbacks)
+        
+        """ construct prediction model
+            we need to construct a new one because we used teacher forcing (where the input for a timestep is not 
+            not the previous generated output, but the correct output) """
+        # self.encoder_model = keras.Model(encoder_inputs, encoder_states)
+
+        # decoder_state_input_h = Input(shape=(Model.LATENT_DIM_RNN,))
+        # decoder_state_input_c = Input(shape=(Model.LATENT_DIM_RNN,))
+        # decoder_states_inputs = [decoder_state_input_h, decoder_state_input_c]
+        # decoder_outputs, state_h, state_c = decoder_lstm(
+        #     embedded_decoder, initial_state=decoder_states_inputs)
+        # decoder_states = [state_h, state_c]
+        # decoder_outputs = decoder_dense(decoder_outputs)
+        # self.decoder_model = keras.Model(
+        #     [decoder_inputs] + decoder_states_inputs,
+        #     [decoder_outputs] + decoder_states)
+
+        # test_samples_in, test_out_simple, test_out_categorical =\
+        #         self.construct_input_output_chars(raw_in=test_raw_in, raw_out=test_raw_out, 
+        #                                         max_size=Model.SRC_TEXT_CHAR_LENGTH)
+        
+        # for input_seq in train_samples_in[:20]:
+        #     print(input_seq, file=log)
+        #     self.compute_predictions(input_seq)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('--small_run', dest='small_run', action='store_true', default=False)
@@ -316,11 +435,16 @@ if __name__ == "__main__":
     parser.add_argument('--load', dest="load", action="store", default="infl_detect_all.h5")
     parser.add_argument('--precision_sure', dest="precision_sure", action="store", default=0.8, type=float)
     parser.add_argument('--verbose', dest="verbose", action="store_true", default=False)
+    parser.add_argument('--eng_noiser', dest="eng_noiser", action="store_true", default=False)
+
     args = parser.parse_args()
 
     for k in args.__dict__:
         if args.__dict__[k] is not None:
             print(k, '->', args.__dict__[k])
+    print('keras version -> {}'.format(keras.__version__))
 
     model = Model()
-    model.run_model_char_decoder()
+    #model.run_model_char_decoder()
+    if args.eng_noiser:
+        model.eng_noiser()
