@@ -19,12 +19,14 @@ import random
 import string
 from typodistance import typoGenerator
 from mistake import Mistake 
-
+"""
+    TODO define categories of mistakes
+"""
+log = open("log.log", "w", encoding='utf-8')
 
 class CorpusGenerator():
 
-
-    PATH_RAW_CORPUS = "books/"
+    PATH_RAW_CORPUS = "corpora/good/"
     MIN_SENT_TOKENS = 6
     CORRECT_DIACS = {
         "ş": "ș",
@@ -34,10 +36,11 @@ class CorpusGenerator():
     }
     MAX_SENT_TOKENS = 18
     #FAST_TEXT = "/home/teo/projects/readme-models/models/fasttext_fb/wiki.ro"
-    FAST_TEXT = "/home/teo/repos/langcorrections/fasttext_fb/wiki.ro"
+    #FAST_TEXT = "/home/teo/repos/langcorrections/fasttext_fb/wiki.ro"
     GENERATE = 1e6
     TASK = Mistake.INFLECTED
 
+    """ get files """
     def __init__(self):
         global args
         if args.task == "i":
@@ -83,22 +86,24 @@ class CorpusGenerator():
             return None
         except:
             return None
-    
+
+    """ clean diacritics """
     def clean_text(self, text: str):
         list_text = list(text)
-        # some cleaning correct diacritics + eliminate \
         text = "".join([CorpusGenerator.CORRECT_DIACS[c] if c in CorpusGenerator.CORRECT_DIACS else c for c in list_text])
-        return text.lower()
+        return text
 
     def construct_connectors(self, connectors_file="wordlists/connectives_ro"):
         pass
 
     def construct_lemma_dict(self, lemma_file="wordlists/lemmas_ro.txt"):
+
         self.word_to_lemma = {}
         self.lemma_to_words = {}
 
-        with open(lemma_file, 'r') as f:
+        with open(lemma_file, 'r', encoding='utf-8') as f:
             for line in f:
+                line = self.clean_text(line)
                 line = line.split()
                 if len(line) != 2:
                     continue
@@ -119,10 +124,14 @@ class CorpusGenerator():
                 else:
                     self.lemma_to_words[line[1]].append(line[1])
 
+        """ some words are repeated """            
+        for key, v in self.lemma_to_words.items():
+            self.lemma_to_words[key] = list(set(v))
+
         print('lemmas: {}'.format(len(self.lemma_to_words)))
         print('words: {}'.format(len(self.word_to_lemma)))
 
-    def construct_dict(self, dict_file="wordlists/dict_ro (1).txt"):
+    def construct_dict(self, dict_file="wordlists/dict_ro.txt"):
          self.dict = set()
          with open(dict_file, 'r') as f:
                for line in f:
@@ -147,18 +156,19 @@ class CorpusGenerator():
     def generate_inflexions(self):
         global args
         self.construct_lemma_dict()
-        #self.construct_dict()
-        lines = []
+        sentences = []
+
         for ffile in self.files:
-            if len(lines) > CorpusGenerator.GENERATE:
+            
+            if len(sentences) > args.generate:
                 break
 
-            for i, sent in enumerate(self.split_sentences(ffile)):
+            for _, sent in enumerate(self.split_sentences(ffile)):
                 line = []
                 if len(lines) % 100 == 0:
                     print('sent {} generated'.format(len(lines)))
 
-                if len(lines) > CorpusGenerator.GENERATE:
+                if len(sentences) > args.generate:
                     break
 
                 sent = self.clean_text(sent)
@@ -204,10 +214,10 @@ class CorpusGenerator():
                     line = []
                   
                 if len(line) > 1:
-                    lines.append(line)
+                    sentences.append(line)
         with open(args.output, 'w') as writeFile:
             writer = csv.writer(writeFile)
-            writer.writerows(lines)  
+            writer.writerows(sentences)  
         # print(self.files)
         # for x in self.split_sentences(self.files[0]):
         #     print(x)
@@ -251,6 +261,8 @@ if __name__ == "__main__":
     from rb.parser.spacy_parser import SpacyParser
     from rb.core.lang import Lang
     from rb.core.document import Document
+    from rb.core.pos import POS
     corpusGenerator = CorpusGenerator()
     corpusGenerator.generate_based_on_features()
     #corpusGenerator.generate()
+    corpusGenerator.test_parser()

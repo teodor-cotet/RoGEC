@@ -287,7 +287,6 @@ class Model:
                     skipped_first_start_char = True
                 else:
                     sent_samples_out.append(out)
-
             """ append 0 to match sizes"""
             sent_samples_out.append(0)
             assert len(sent_samples_out) == max_size, 'decoder target length mismatch'
@@ -411,6 +410,7 @@ class Model:
             train_samples_in, train_out_simple, train_out_categorical = \
                 self.construct_input_output_chars(raw_in=train_raw_in, raw_out=train_raw_out, 
                                                   max_size=Model.SRC_TEXT_CHAR_LENGTH)
+            train_samples_in.reshape(())
             if args.verbose:
                 print('Coding in/out info')
                 for (inn, outs, outc) in zip(train_samples_in, train_out_simple, train_out_categorical):
@@ -435,7 +435,8 @@ class Model:
                     batch_size=Model.BATCH_SIZE, 
                     epochs=Model.EPOCHS, 
                     validation_split=0.2,
-                    callbacks=callbacks)
+                    callbacks=callbacks,
+                    shuffle='batch')
             
             """ construct prediction model
                 we need to construct a new one because we used teacher forcing (where the input for a timestep is not 
