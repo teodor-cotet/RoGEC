@@ -19,12 +19,14 @@ import random
 import string
 from typodistance import typoGenerator
 from mistake import Mistake 
-
+"""
+    TODO define categories of mistakes
+"""
+log = open("log.log", "w", encoding='utf-8')
 
 class CorpusGenerator():
 
-
-    PATH_RAW_CORPUS = "books/"
+    PATH_RAW_CORPUS = "corpora/good/"
     MIN_SENT_TOKENS = 6
     CORRECT_DIACS = {
         "ş": "ș",
@@ -34,10 +36,11 @@ class CorpusGenerator():
     }
     MAX_SENT_TOKENS = 18
     #FAST_TEXT = "/home/teo/projects/readme-models/models/fasttext_fb/wiki.ro"
-    FAST_TEXT = "/home/teo/repos/langcorrections/fasttext_fb/wiki.ro"
+    #FAST_TEXT = "/home/teo/repos/langcorrections/fasttext_fb/wiki.ro"
     GENERATE = 1e6
     TASK = Mistake.INFLECTED
 
+    """ get files """
     def __init__(self):
         global args
         if args.task == "i":
@@ -51,10 +54,34 @@ class CorpusGenerator():
             if isfile(join(CorpusGenerator.PATH_RAW_CORPUS, f)) and f.endswith(".txt"):
                 self.files.append(join(CorpusGenerator.PATH_RAW_CORPUS, f))
         
-        self.parser = SpacyParser.get_instance().get_model(Lang.RO)
+        #self.parser = SpacyParser.get_instance().get_model(Lang.RO)
         #self.fasttext = FastText.load(CorpusGenerator.FAST_TEXT)
-        self.fasttext = FastTextWrapper.load_fasttext_format(CorpusGenerator.FAST_TEXT)
-                
+        #self.fasttext = FastTextWrapper.load_fasttext_format(CorpusGenerator.FAST_TEXT)
+
+    def test_parser(self):
+        txt = """S-a născut aldkl repede la 1 februarie 1852,[3] 
+                în satul Haimanale (care astăzi îi poartă numele),  1900
+                fiind primul născut al lui Luca Ștefan Caragiale și al Ecaterinei Chiriac Karaboas.
+                Conform unor surse, familia sa ar fi fost de origine aromână.[6] Tatăl său, Luca (1812 - 1870), 
+                și frații acestuia, Costache și Iorgu, s-au născut la Constantinopol, 
+                fiind fiii lui Ștefan, un bucătar angajat la sfârșitul anului 1812 de Ioan Vodă Caragea în suita sa."""
+
+        self.construct_lemma_dict()
+        docs_ro = Document(Lang.RO, txt)
+        
+        for key in docs_ro.get_tokens():
+            print(key.text, key.lemma, key.pos, key.ent_type, key.detailed_pos, key.is_dict_word(), file=log)
+
+            if key.lemma in self.lemma_to_words:
+                print(self.lemma_to_words[key.lemma], file=log)
+
+                for alternative in self.lemma_to_words[key.lemma]:
+                    token = Document(Lang.RO, alternative).get_tokens()[0]
+                    print(token.text, token.detailed_pos, token.is_dict_word(), file=log)
+            else:
+                print('-', file=log)
+            print('\n\n', file=log)
+
     def split_sentences(self, fileName: str) -> Iterable[List[str]]:
         # sentences = []
         tokenizer = WordPunctTokenizer()
@@ -83,22 +110,24 @@ class CorpusGenerator():
             return None
         except:
             return None
-    
+
+    """ clean diacritics """
     def clean_text(self, text: str):
         list_text = list(text)
-        # some cleaning correct diacritics + eliminate \
         text = "".join([CorpusGenerator.CORRECT_DIACS[c] if c in CorpusGenerator.CORRECT_DIACS else c for c in list_text])
-        return text.lower()
+        return text
 
     def construct_connectors(self, connectors_file="wordlists/connectives_ro"):
         pass
         
     def construct_lemma_dict(self, lemma_file="wordlists/lemmas_ro.txt"):
+
         self.word_to_lemma = {}
         self.lemma_to_words = {}
 
-        with open(lemma_file, 'r') as f:
+        with open(lemma_file, 'r', encoding='utf-8') as f:
             for line in f:
+                line = self.clean_text(line)
                 line = line.split()
                 if len(line) != 2:
                     continue
@@ -119,10 +148,14 @@ class CorpusGenerator():
                 else:
                     self.lemma_to_words[line[1]].append(line[1])
 
+        """ some words are repeated """            
+        for key, v in self.lemma_to_words.items():
+            self.lemma_to_words[key] = list(set(v))
+
         print('lemmas: {}'.format(len(self.lemma_to_words)))
         print('words: {}'.format(len(self.word_to_lemma)))
 
-    def construct_dict(self, dict_file="wordlists/dict_ro (1).txt"):
+    def construct_dict(self, dict_file="wordlists/dict_ro.txt"):
          self.dict = set()
          with open(dict_file, 'r') as f:
                for line in f:
@@ -143,21 +176,23 @@ class CorpusGenerator():
                                 or tagg.startswith("DBLQ") or tagg.startswith("EXCL")
                                 or tagg.startswith("X") or tagg.startswith("Csssp")
                                 or tagg.startswith("Qz")or tagg.startswith("Rp"))
+    
     def generate(self):
         global args
         self.construct_lemma_dict()
-        #self.construct_dict()
-        lines = []
+        sentences = []
+
         for ffile in self.files:
-            if len(lines) > CorpusGenerator.GENERATE:
+            
+            if len(sentences) > args.generate:
                 break
 
-            for i, sent in enumerate(self.split_sentences(ffile)):
+            for _, sent in enumerate(self.split_sentences(ffile)):
                 line = []
-                if len(lines) % 100 == 0:
-                    print(len(lines))
+                if len(sentences) % 1000 == 0:
+                    print('Generated {} samples'.format(len(sentences)))
 
-                if len(lines) > CorpusGenerator.GENERATE:
+                if len(sentences) > args.generate:
                     break
 
                 sent = self.clean_text(sent)
@@ -203,21 +238,20 @@ class CorpusGenerator():
                     line = []
                   
                 if len(line) > 1:
-                    lines.append(line)
+                    sentences.append(line)
         with open(args.output, 'w') as writeFile:
             writer = csv.writer(writeFile)
-            writer.writerows(lines)  
+            writer.writerows(sentences)  
         # print(self.files)
         # for x in self.split_sentences(self.files[0]):
         #     print(x)
-
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('--output', dest='output', action='store', default="out.csv")
     parser.add_argument('--task', dest='task', action='store', default="i")
     parser.add_argument('--rb_path', dest='rb_path', action='store', default="../readerbenchpy/")
+    parser.add_argument('--generate', dest='generate', action='store', default=3e5, type=int)
     args = parser.parse_args()
 
     for k in args.__dict__:
@@ -228,6 +262,7 @@ if __name__ == "__main__":
     from rb.parser.spacy_parser import SpacyParser
     from rb.core.lang import Lang
     from rb.core.document import Document
+    from rb.core.pos import POS
     corpusGenerator = CorpusGenerator()
-    corpusGenerator.generate()
     #corpusGenerator.generate()
+    corpusGenerator.test_parser()

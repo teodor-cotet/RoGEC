@@ -169,7 +169,7 @@ class Model:
             sent_samples_out.append(keras.utils.to_categorical([0], num_classes=Model.NR_CHARS)[0])
             all_samples_in.append(inn)         
             all_samples_out_categorical.append(np.asarray(sent_samples_out))
-        return all_samples_in, all_samples_out_simple, all_samples_out_categorical
+        return np.asarray(all_samples_in), np.asarray(all_samples_out_simple), np.asarray(all_samples_out_categorical)
 
     def compute_predictions(self, input_seq):
         # Encode the input as state vectors.
@@ -251,6 +251,7 @@ class Model:
             train_samples_in, train_out_simple, train_out_categorical = \
                 self.construct_input_output_chars(raw_in=train_raw_in, raw_out=train_raw_out, 
                                                   max_size=Model.SRC_TEXT_CHAR_LENGTH)
+            train_samples_in.reshape(())
             if args.verbose:
                 print('Coding in/out info')
                 for (inn, outs, outc) in zip(train_samples_in, train_out_simple, train_out_categorical):
@@ -275,7 +276,8 @@ class Model:
                     batch_size=Model.BATCH_SIZE, 
                     epochs=Model.EPOCHS, 
                     validation_split=0.2,
-                    callbacks=callbacks)
+                    callbacks=callbacks,
+                    shuffle='batch')
             
             """ construct prediction model
                 we need to construct a new one because we used teacher forcing (where the input for a timestep is not 
