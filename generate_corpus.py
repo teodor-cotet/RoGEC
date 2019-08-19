@@ -51,9 +51,9 @@ class CorpusGenerator():
             if isfile(join(CorpusGenerator.PATH_RAW_CORPUS, f)) and f.endswith(".txt"):
                 self.files.append(join(CorpusGenerator.PATH_RAW_CORPUS, f))
         
-        self.parser = SpacyParser.get_instance().get_model(Lang.RO)
+        #self.parser = SpacyParser.get_instance().get_model(Lang.RO)
         #self.fasttext = FastText.load(CorpusGenerator.FAST_TEXT)
-        self.fasttext = FastTextWrapper.load_fasttext_format(CorpusGenerator.FAST_TEXT)
+        #self.fasttext = FastTextWrapper.load_fasttext_format(CorpusGenerator.FAST_TEXT)
                 
     def split_sentences(self, fileName: str) -> Iterable[List[str]]:
         # sentences = []
@@ -92,7 +92,7 @@ class CorpusGenerator():
 
     def construct_connectors(self, connectors_file="wordlists/connectives_ro"):
         pass
-        
+
     def construct_lemma_dict(self, lemma_file="wordlists/lemmas_ro.txt"):
         self.word_to_lemma = {}
         self.lemma_to_words = {}
@@ -143,7 +143,8 @@ class CorpusGenerator():
                                 or tagg.startswith("DBLQ") or tagg.startswith("EXCL")
                                 or tagg.startswith("X") or tagg.startswith("Csssp")
                                 or tagg.startswith("Qz")or tagg.startswith("Rp"))
-    def generate(self):
+    
+    def generate_inflexions(self):
         global args
         self.construct_lemma_dict()
         #self.construct_dict()
@@ -155,7 +156,7 @@ class CorpusGenerator():
             for i, sent in enumerate(self.split_sentences(ffile)):
                 line = []
                 if len(lines) % 100 == 0:
-                    print(len(lines))
+                    print('sent {} generated'.format(len(lines)))
 
                 if len(lines) > CorpusGenerator.GENERATE:
                     break
@@ -211,6 +212,27 @@ class CorpusGenerator():
         # for x in self.split_sentences(self.files[0]):
         #     print(x)
 
+    def generate_based_on_features(self):
+        global args
+        lines = []
+
+        for ffile in self.files:
+            if len(lines) > args.samples:
+                break
+
+            for i, sent in enumerate(self.split_sentences(ffile)):
+                line = []
+                if len(lines) % 100 == 0:
+                    print('sent {} generated'.format(len(lines)))
+
+                if len(lines) > args.samples:
+                    break
+
+                sent = self.clean_text(sent)
+                docs_ro = Document(Lang.RO, sent)
+                for token in docs_ro.get_tokens():
+                    print(token.lemma, token.text, token.tag, token.pos_features, file=log)
+
 
 
 if __name__ == "__main__":
@@ -218,6 +240,7 @@ if __name__ == "__main__":
     parser.add_argument('--output', dest='output', action='store', default="out.csv")
     parser.add_argument('--task', dest='task', action='store', default="i")
     parser.add_argument('--rb_path', dest='rb_path', action='store', default="../readerbenchpy/")
+    parser.add_argument('--samples', dest='samples', action='store', default=1e6)
     args = parser.parse_args()
 
     for k in args.__dict__:
@@ -229,5 +252,5 @@ if __name__ == "__main__":
     from rb.core.lang import Lang
     from rb.core.document import Document
     corpusGenerator = CorpusGenerator()
-    corpusGenerator.generate()
+    corpusGenerator.generate_based_on_features()
     #corpusGenerator.generate()
