@@ -12,21 +12,39 @@ from gensim.models.wrappers import FastText as FastTextWrapper
 import sys
 import csv
 import argparse
-
+import copy
+import re
 
 
 import random
 import string
 from typodistance import typoGenerator
 from mistake import Mistake 
+from enum import Enum
+from collections import Counter
 """
     TODO define categories of mistakes
 """
 log = open("log.log", "w", encoding='utf-8')
 
+class MistakeType(Enum):
+    TYPO = 'typo' # typo
+    DIAC = 'diac' # diacritice 
+    Fv = 'vf' # forma verbului 
+    SVA = 'sva' # subiect-verb
+    PRE = 'pre' # preopozitii
+    VIR = 'vir' # virgula
+    FC = 'fc' # forma cuvintelor
+    CR = 'cr' # cratima
+    SP = 'sp' # spatiere
+    GEN = 'gen' # genul gresit  
+    CASE = 'case' # cazul substantivului
+    PI = 'pi' # forma pronumelui de intarire
+    ACP = 'acp' # acordul cu posesorul
+
 class CorpusGenerator():
 
-    PATH_RAW_CORPUS = "corpora/good/"
+    PATH_RAW_CORPUS = "corpora/"
     MIN_SENT_TOKENS = 6
     CORRECT_DIACS = {
         "ş": "ș",
@@ -34,6 +52,8 @@ class CorpusGenerator():
         "ţ": "ț",
         "Ţ": "Ț",
     }
+    DIACS = {'Ă': 'A', 'ă': 'a', 'Â': 'A', 'â': 'a',
+                    'Î':' I', 'î': 'i', 'Ș': 'S', 'ș': 's', 'Ț': 'T', 'ț': 't'}
     MAX_SENT_TOKENS = 18
     #FAST_TEXT = "/home/teo/projects/readme-models/models/fasttext_fb/wiki.ro"
     #FAST_TEXT = "/home/teo/repos/langcorrections/fasttext_fb/wiki.ro"
@@ -43,58 +63,22 @@ class CorpusGenerator():
     """ get files """
     def __init__(self):
         global args
-        if args.task == "i":
-            CorpusGenerator.TASK = Mistake.INFLECTED
-        elif args.task == 't':
-            CorpusGenerator.TASK = Mistake.TYPO
-        else:
-            CorpusGenerator.TASK = Mistake.ALL
         self.files = []
         for f in listdir(CorpusGenerator.PATH_RAW_CORPUS):
             if isfile(join(CorpusGenerator.PATH_RAW_CORPUS, f)) and f.endswith(".txt"):
                 self.files.append(join(CorpusGenerator.PATH_RAW_CORPUS, f))
-        
-        #self.parser = SpacyParser.get_instance().get_model(Lang.RO)
-        #self.fasttext = FastText.load(CorpusGenerator.FAST_TEXT)
-        #self.fasttext = FastTextWrapper.load_fasttext_format(CorpusGenerator.FAST_TEXT)
                 
     def split_sentences(self, fileName: str) -> Iterable[List[str]]:
-        # sentences = []
         tokenizer = WordPunctTokenizer()
         with open(fileName, "rt", encoding='utf-8') as f:
             for line in f.readlines():
                 for sent in sent_tokenize(line):
                     yield sent
 
-    def modify_word(self, token, mistake_type):
-        text_token = token.text
-        try:
-            if mistake_type is Mistake.TYPO:
-                typo = random.choice([x for x in typoGenerator(text_token, 2)][1:])
-                return typo
-            elif mistake_type is Mistake.INFLECTED:
-                if token.text not in self.word_to_lemma[token.text]:
-                    lemma = token.lemma_
-                else:
-                    lemma = self.word_to_lemma[token.text]
-
-                if lemma in self.lemma_to_words:
-                    candidates = self.lemma_to_words[lemma]
-                    potential = random.choice(candidates)
-                    if potential != token.text:
-                        return potential
-            return None
-        except:
-            return None
-
-    """ clean diacritics """
     def clean_text(self, text: str):
         list_text = list(text)
         text = "".join([CorpusGenerator.CORRECT_DIACS[c] if c in CorpusGenerator.CORRECT_DIACS else c for c in list_text])
         return text
-
-    def construct_connectors(self, connectors_file="wordlists/connectives_ro"):
-        pass
 
     def construct_lemma_dict(self, lemma_file="wordlists/lemmas_ro.txt"):
 
@@ -132,125 +116,226 @@ class CorpusGenerator():
         print('words: {}'.format(len(self.word_to_lemma)))
 
     def construct_dict(self, dict_file="wordlists/dict_ro.txt"):
-         self.dict = set()
-         with open(dict_file, 'r') as f:
-               for line in f:
-                   line = line.strip()
-                   self.dict.add(line)
+        self.dict = set()
+        with open(dict_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                self.dict.add(line)
 
-    def is_not_word(self, tagg):
-        return (tagg.startswith("P") or tagg.startswith("COMMA")
-                                or tagg.startswith("DASH") or tagg.startswith("COLON")
-                                or tagg.startswith("QUEST") or tagg.startswith("HELLIP")
-                                or tagg.startswith("DBLQ") or tagg.startswith("EXCL")
-                                or tagg.startswith("X"))
+    def is_wrongable_pos(self, pos):
+        return (pos is not POS.X and pos is not POS.SYM and
+                    pos is not POS.SPACE and pos is not POS.PUNCT)
 
-    def not_good_for_infl(self, tagg):
-        return (tagg.startswith("P") or tagg.startswith("COMMA")
-                                or tagg.startswith("DASH") or tagg.startswith("COLON")
-                                or tagg.startswith("QUEST") or tagg.startswith("HELLIP")
-                                or tagg.startswith("DBLQ") or tagg.startswith("EXCL")
-                                or tagg.startswith("X") or tagg.startswith("Csssp")
-                                or tagg.startswith("Qz")or tagg.startswith("Rp"))
+    def filter_sentence(self, correct_sent, tokens):
+        """filter wierd sentences """
+        if not (correct_sent[0].isupper() or correct_sent[0] == '—'):  return False
+        if correct_sent[0] == '-' and random.randint(0, 99) > 85:   return False
+        if len(tokens) < 4: return False
+
+        poses = [token.pos for token in tokens]
+        pos_counter = Counter(poses)
+        ok_words_to_modify = 0
+        # for pos in POS: TODO include this
+        #     if self.is_wrongable_pos(pos):
+        #         ok_words_to_modify += pos_counter[pos]
+        # if ok_words_to_modify == 0:
+        #     return False
+        return True
+
+    def eliminate_one_diac(self, word_text):
+        diacs = {'Ă': 'A', 'ă': 'a', 'Â': 'A', 'â': 'a',
+                'Î':' I', 'î': 'i', 'Ș': 'S', 'ș': 's', 'Ț': 'T', 'ț': 't'}
+        chars = list(word_text)
+        chars_ind = [(i, c) for i, c in enumerate(chars) if c in diacs]
+        (index, c) = random.choice(chars_ind)
+        chars[index] = diacs[c]
+        return "".join(chars)
+
+    def modify_word(self, token, mistake_type):
+        text_token = token.text
+        try:
+            # check pos
+            if mistake_type is MistakeType.TYPO:
+                typo = random.choice([x for x in typoGenerator(text_token, 1)][1:])
+                return typo
+            elif mistake_type is MistakeType.DIAC:
+                if self.count_diacritics(text_token) >= 1:
+                    return self.eliminate_one_diac(text_token)
+                else:
+                    return None
+            elif mistake_type is MistakeType.Fv:
+                return None
+        except:
+            return None
     
-    def generate_inflexions(self):
-        global args
-        self.construct_lemma_dict()
-        sentences = []
+    def count_diacritics(self, s):
+        diacs = {'Ă': 'A', 'ă': 'a', 'Â': 'A', 'â': 'a',
+                'Î':' I', 'î': 'i', 'Ș': 'S', 'ș': 's', 'Ț': 'T', 'ț': 't'}
+        count = 0 
+        for c in s:
+            if c in diacs:
+                count += 1
+        return count
 
-        for ffile in self.files:
-            
-            if len(sentences) > args.generate:
-                break
+    def replace_space_with_comma(self, s):
+        lkk = list(s)
+        lkk[0] = ','
+        return "".join(lkk)
+    
+    def capitalize_first_char(self, s):
+        lkk = list(s)
+        lkk[1] = lkk[1].toupper()
+        return "".join(lkk)
 
-            for _, sent in enumerate(self.split_sentences(ffile)):
-                line = []
-                if len(lines) % 100 == 0:
-                    print('sent {} generated'.format(len(lines)))
+    def construct_prepositions_mistakes(self, correct_sent):
 
-                if len(sentences) > args.generate:
+        success = False
+        short_long = 'short-long'
+        long_short = 'long-short'
+        different = 'different'
+        
+        " types of replaces, first char has to be a space"
+        replaces = {
+            short_long: {" care ": " pe care ", ' ca ': ' ca și '},
+            long_short: {" pe care ": " care ", ' ca și ': ' ca '},
+            different: {' dintre ': ' din '}
+        }
+
+        for k, v in replaces.items():
+            for kk, vv in replaces.items():
+                nkk = self.replace_space_with_comma(kk)
+                nvv = self.replace_space_with_comma(vv)
+                replaces[k][nkk] = nvv
+                
+        wrong_sent = None
+        randoms = [0, 1, 2]
+        random.shuffle(randoms)
+        for r in randoms:
+            if r == 0:
+                for short, llong in replaces[short_long].items():
+                    if correct_sent.find(llong) == -1 and correct_sent.find(short) != -1:
+                        wrong_sent = correct_sent.replace(short, llong)
+                        return wrong_sent
+            elif r == 1:
+                for llong, short in replaces[long_short].items():
+                    if correct_sent.find(llong) != -1:
+                        wrong_sent = correct_sent.replace(llong, short)
+                        return wrong_sent
+            elif r == 2:
+                for key, v in replaces[different].items():
+                    if correct_sent.find(key) != -1:
+                        wrong_sent = correct_sent.replace(key, v)
+                        return wrong_sent
+                    
+        return wrong_sent
+
+    def eliminate_one_comma(self, correct_sent):
+
+        commas = Counter(list(correct_sent))[","]
+        if commas == 0: return None
+        r = random.randint(0, commas - 1)
+        lcorrect_sent = list(correct_sent)
+        all_ind = [i.start() for i in re.finditer(',', correct_sent)]
+        del lcorrect_sent[all_ind[r]]
+        return "".join(lcorrect_sent)
+
+    def adjust_dash(self, correct_sent):
+        """ eliminate dash """
+        all_diacs = "".join([d for d, _ in CorpusGenerator.DIACS.items()])
+        pattern = '[A-Za-z' + all_diacs + ']+-' + '[A-Za-z' + all_diacs + ']'
+
+        matches = re.findall(pattern, correct_sent)
+        if len(matches) == 0:
+            return None
+        else:
+            match = matches[0]
+        modified = match.replace('-', '')
+        return correct_sent.replace(match, modified)
+
+    def reconstruct_sent(self, wrong_words):
+        reconstructed_sent = ' '.join(wrong_words)
+        replaces = {" ,": ",", " !": "!", " ?": "?", " .": ".", ' - ': '-', ' :': ':',  ' ;': ';'}
+        for k, v in replaces.items():
+            reconstructed_sent = reconstructed_sent.replace(k, v)
+        return reconstructed_sent
+
+    def construct_mistake(self, tokens, correct_sent, wronged_sents, mistake_type):
+        
+        line = []
+        wrong_sent = None
+
+        """mistakes implying modfying more than one word"""
+        if mistake_type is MistakeType.PRE:
+            wrong_sent = self.construct_prepositions_mistakes(correct_sent)
+        elif mistake_type is MistakeType.VIR:
+            wrong_sent = self.eliminate_one_comma(correct_sent)
+        elif mistake_type is MistakeType.CR:
+            wrong_sent = self.adjust_dash(correct_sent)
+        else:
+            tries = 0
+            """ one word mistakes """
+            while True:
+                index = random.randint(0, len(tokens) - 1)
+                #if self.is_wrongable_pos(tokens[index].pos) TODO keep this
+                new_word = self.modify_word(tokens[index], mistake_type)
+                if new_word is not None:
+                    wrong_words = [token.text for token in tokens]
+                    wrong_words[index] = new_word
+                    wrong_sent = self.reconstruct_sent(wrong_words)
                     break
+                tries += 1
+                if tries > 20:  break
+        
+        if wrong_sent is not None:
+            line.append(wrong_sent)
+            line.append(correct_sent)
+            line.append(mistake_type)
+            wronged_sents.append(line)
 
-                sent = self.clean_text(sent)
-                docs_ro = self.parser(sent)
-                tokens = [token for token in docs_ro]
+    def wrong_sentence(self, correct_sent):
+        "wrong the sentence, trying each case"
+        correct_sent = self.clean_text(correct_sent)
+        docs_ro = Document(Lang.RO, correct_sent)
+        tokens = docs_ro.get_tokens()
+        if self.filter_sentence(correct_sent, tokens) == False: return []
+        nr_mistakes_types = len(MistakeType)
+        wronged_sents = []
 
-                # nr of words out of dictionary
-                cnt_out_of_dict = 0
-                for token in tokens:
-                    tagg = str(token.tag_)
-                    if  self.is_not_word(tagg) == False and token.text not in self.fasttext.wv.vocab:
-                        cnt_out_of_dict += 1
-                        #print(token.text)
-
-                text_tokens = [token.text for token in docs_ro]
-                sent2 = " ".join(text_tokens)
-
-                try:
-                    if (len(tokens) >= CorpusGenerator.MIN_SENT_TOKENS and len(tokens) <= CorpusGenerator.MAX_SENT_TOKENS
-                    and cnt_out_of_dict == 0):
-                        count_tries = 0
-                        while count_tries < 20:
-                            index = random.randint(0, len(tokens) - 1)
-                            tagg = str(tokens[index].tag_)
-                            if CorpusGenerator.TASK is Mistake.INFLECTED and self.not_good_for_infl(tagg) == True: # punctuation
-                                count_tries += 1
-                                continue
-
-                            text_tok = self.modify_word(tokens[index], CorpusGenerator.TASK)
-                            if text_tok is not None:
-                                text_tokens[index] = text_tok
-                                sent3 = " ".join(text_tokens)
-                                line.append(sent2)
-                                line.append(sent3)
-                                line.append(tokens[index].tag_)
-                                line.append(Mistake.INFLECTED.value)
-                                break
-                            else:
-                                count_tries += 1
-                                continue
-                            count_tries += 1
-                except:
-                    line = []
-                  
-                if len(line) > 1:
-                    sentences.append(line)
-        with open(args.output, 'w') as writeFile:
-            writer = csv.writer(writeFile)
-            writer.writerows(sentences)  
-        # print(self.files)
-        # for x in self.split_sentences(self.files[0]):
-        #     print(x)
-
+        for r in range(nr_mistakes_types):
+            line = []
+            if r == 0 and r == args.type:
+                self.construct_mistake(tokens, correct_sent, wronged_sents, mistake_type=MistakeType.TYPO)
+            elif r == 1 and r == args.type:
+                self.construct_mistake(tokens, correct_sent, wronged_sents, mistake_type=MistakeType.DIAC)
+            elif r == 4 and r == args.type:
+                self.construct_mistake(tokens, correct_sent, wronged_sents, mistake_type=MistakeType.PRE)
+            elif r == 5 and r == args.type:
+                self.construct_mistake(tokens, correct_sent, wronged_sents, mistake_type=MistakeType.VIR)
+            elif r == 7 and r == args.type:
+                self.construct_mistake(tokens, correct_sent, wronged_sents, mistake_type=MistakeType.CR)
+        return wronged_sents
+        
     def generate_based_on_features(self):
         global args
         lines = []
 
         for ffile in self.files:
-            if len(lines) > args.samples:
-                break
-
-            for i, sent in enumerate(self.split_sentences(ffile)):
-                line = []
-                if len(lines) % 100 == 0:
-                    print('sent {} generated'.format(len(lines)))
-
-                if len(lines) > args.samples:
-                    break
-
-                sent = self.clean_text(sent)
-                docs_ro = Document(Lang.RO, sent)
-                for token in docs_ro.get_tokens():
-                    print(token.lemma, token.text, token.tag, token.pos_features, file=log)
-
-
+            if len(lines) > args.samples:   break
+            for i, correct_sent in enumerate(self.split_sentences(ffile)):
+                if len(lines) % 100 == 0:   print('sent {} generated'.format(len(lines)))
+                if len(lines) > args.samples:   break
+                wrong_sents = self.wrong_sentence(correct_sent)
+                for sent in wrong_sents:    lines.append(sent)
+        for line in lines:
+            print(line[0], '\t', line[1], line[2], '\t', file=log)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('--output', dest='output', action='store', default="out.csv")
     parser.add_argument('--task', dest='task', action='store', default="i")
     parser.add_argument('--rb_path', dest='rb_path', action='store', default="../readerbenchpy/")
-    parser.add_argument('--samples', dest='samples', action='store', default=1e6)
+    parser.add_argument('--samples', dest='samples', action='store', default=50, type=int)
+    parser.add_argument('--type', dest='type', action='store', default=0, type=int)
     args = parser.parse_args()
 
     for k in args.__dict__:
@@ -265,4 +350,4 @@ if __name__ == "__main__":
     corpusGenerator = CorpusGenerator()
     corpusGenerator.generate_based_on_features()
     #corpusGenerator.generate()
-    corpusGenerator.test_parser()
+    #corpusGenerator.test_parser()
