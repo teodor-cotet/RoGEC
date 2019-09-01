@@ -203,7 +203,7 @@ class Model:
             target_seq = np.zeros((1, 1))
             target_seq[0, 0] = index
             saved_target_and_state = [target_seq] + state
-            cand_prob += Model.BETA_RANDOM_NOISING * random.randint(0, 100000) / 100000
+            #cand_prob += Model.BETA_RANDOM_NOISING * random.randint(0, 100000) / 100000
             if len(new_beam_cands) < args.beam_width:
                 new_beam_cands[new_str] = (cand_prob + base_prob, saved_target_and_state) 
             else:
@@ -382,6 +382,7 @@ class Model:
         test_raw_in, test_raw_out = [t1 for t1, _ in test], [t2 for _, t2 in test]
         # model seq2seq
         # encoder input model
+
         encoder_inputs = Input(shape=(None,))
         char_emb_encoder = Embedding(input_dim=Model.NR_CHARS, output_dim=Model.LATENT_DIM_CHARS, mask_zero=True, trainable=True)
         embedded_encoder = char_emb_encoder(encoder_inputs)
@@ -402,45 +403,49 @@ class Model:
         decoder_outputs, _, _ = decoder_lstm(embedded_decoder, initial_state=encoder_states)
         decoder_dense = Dense(Model.NR_CHARS, activation='softmax')
         decoder_outputs = decoder_dense(decoder_outputs)
+        if args.no_train == False:
+            model = keras.Model([encoder_inputs, decoder_inputs], decoder_outputs)
 
-        model = keras.Model([encoder_inputs, decoder_inputs], decoder_outputs)
+            model.compile(loss='sparse_categorical_crossentropy', optimizer='adam')
 
-        model.compile(loss='sparse_categorical_crossentropy', optimizer='adam')
+            encoder_input_data, decoder_input_data, decoder_output_data = \
+                self.construct_input_output_chars(raw_in=train_raw_in, raw_out=train_raw_out, 
+                                                    max_size=Model.SRC_TEXT_CHAR_LENGTH)
+            if args.verbose:
+                print('Coding in/out info')
+                for (inn, outs, outc) in zip(encoder_input_data, decoder_input_data, decoder_output_data):
+                    print('input seq: ', file=log)
+                    print(inn, file=log)
+                    print('input shape: ')
+                    print(inn.shape, file=log)
+                    print('input (decoder) seq:')
+                    print(outs, file=log)
+                    print('input (decoder) shape:')
+                    print(outs.shape, file=log)
+                    print('output (train) seq:')
+                    print(outc, file=log)
+                    print('output (train) shape:')
+                    print(outc.shape, file=log)
+                    break
 
-        encoder_input_data, decoder_input_data, decoder_output_data = \
-            self.construct_input_output_chars(raw_in=train_raw_in, raw_out=train_raw_out, 
-                                                max_size=Model.SRC_TEXT_CHAR_LENGTH)
-        if args.verbose:
-            print('Coding in/out info')
-            for (inn, outs, outc) in zip(encoder_input_data, decoder_input_data, decoder_output_data):
-                print('input seq: ', file=log)
-                print(inn, file=log)
-                print('input shape: ')
-                print(inn.shape, file=log)
-                print('input (decoder) seq:')
-                print(outs, file=log)
-                print('input (decoder) shape:')
-                print(outs.shape, file=log)
-                print('output (train) seq:')
-                print(outc, file=log)
-                print('output (train) shape:')
-                print(outc.shape, file=log)
-                break
+            filepath = "models/saved-model-{epoch:02d}-{val_loss:.2f}.hdf5"
+            checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
+            callbacks = [keras.callbacks.EarlyStopping(monitor='val_loss', patience=Model.PATIENCE), checkpoint]
+            print(model.summary())
+            
+            encoder_input_data = np.asarray(encoder_input_data) 
+            decoder_input_data = np.asarray(decoder_input_data) 
+            decoder_output_data = np.asarray(decoder_output_data)
+            print(encoder_input_data.shape, decoder_input_data.shape, decoder_output_data.shape)
 
-        filepath = "models/saved-model-{epoch:02d}-{val_loss:.2f}.hdf5"
-        checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
-        callbacks = [keras.callbacks.EarlyStopping(monitor='val_loss', patience=Model.PATIENCE), checkpoint]
-        print(model.summary())
-        
-        encoder_input_data = np.asarray(encoder_input_data) 
-        decoder_input_data = np.asarray(decoder_input_data) 
-        decoder_output_data = np.asarray(decoder_output_data)
-        print(encoder_input_data.shape, decoder_input_data.shape, decoder_output_data.shape)
-
-        model.fit([encoder_input_data, decoder_input_data], decoder_output_data,
-                batch_size=Model.BATCH_SIZE,  epochs=Model.EPOCHS, validation_split=0.2,
-                callbacks=callbacks)
-        
+            model.fit([encoder_input_data, decoder_input_data], decoder_output_data,
+                    batch_size=Model.BATCH_SIZE,  epochs=Model.EPOCHS, validation_split=0.2,
+                    callbacks=callbacks)
+        else:
+            model = keras.models.load_model('models/saved-model-03-0.37.hdf5')
+            encoder_input_data, decoder_input_data, decoder_output_data = \
+                self.construct_input_output_chars(raw_in=train_raw_in, raw_out=train_raw_out, 
+                                                    max_size=Model.SRC_TEXT_CHAR_LENGTH)
         """ construct prediction model
             we need to construct a new one because we used teacher forcing (where the input for a timestep is not 
             not the previous generated output, but the correct output) """

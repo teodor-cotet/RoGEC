@@ -25,7 +25,7 @@ from collections import Counter
 """
     TODO define categories of mistakes
 """
-log = open("log.log", "w", encoding='utf-8')
+log = open("corpus_log.log", "w", encoding='utf-8')
 
 class MistakeType(Enum):
     TYPO = 'typo' # typo
@@ -55,8 +55,6 @@ class CorpusGenerator():
     DIACS = {'Ă': 'A', 'ă': 'a', 'Â': 'A', 'â': 'a',
                     'Î':' I', 'î': 'i', 'Ș': 'S', 'ș': 's', 'Ț': 'T', 'ț': 't'}
     MAX_SENT_TOKENS = 18
-    #FAST_TEXT = "/home/teo/projects/readme-models/models/fasttext_fb/wiki.ro"
-    #FAST_TEXT = "/home/teo/repos/langcorrections/fasttext_fb/wiki.ro"
     GENERATE = 1e6
     TASK = Mistake.INFLECTED
 
@@ -122,6 +120,24 @@ class CorpusGenerator():
                 line = line.strip()
                 self.dict.add(line)
 
+    def pre_computations(self):
+        count = 0
+        self.dash_words = {} # no-dash word: dash word
+        for ffile in self.files:
+            for i, correct_sent in enumerate(self.split_sentences(ffile)):
+                docs_ro = Document(Lang.RO, correct_sent)
+                tokens = docs_ro.get_tokens()
+                if self.filter_sentence(correct_sent, tokens) == False: continue
+                count += 1
+                if count > args.samples: 
+                    print(self.dash_words, file=log)
+                    return
+                for i, token in enumerate(tokens):
+                    if token.text == '-' and i > 0 and i < len(tokens) - 1:
+                        dash_word =  tokens[i - 1].text + tokens[i].text + tokens[i + 1].text
+                        no_dash_word = tokens[i-1].text + tokens[i+1].text
+                        self.dash_words[no_dash_word] = dash_word
+                
     def is_wrongable_pos(self, pos):
         return (pos is not POS.X and pos is not POS.SYM and
                     pos is not POS.SPACE and pos is not POS.PUNCT)
@@ -229,6 +245,50 @@ class CorpusGenerator():
                     
         return wrong_sent
 
+    def construct_spacing_mistakes(self, correct_sent):
+        different = 'different'
+        replaces = {
+            different: {' de asemenea ': ' deasmenea ', ' de fapt ': ' defapt ', ' de altfel ': ' dealtfel ', ' nu mai ': ' numai ',
+            ' numai ': ' nu mai ', ' o dată ': ' odată ', ' odată ': ' o dată ', ' în continuu ': ' încontinuu '}
+        }
+
+        for k, v in replaces.items():
+            for kk, vv in replaces.items():
+                nkk = self.replace_space_with_comma(kk)
+                nvv = self.replace_space_with_comma(vv)
+                replaces[k][nkk] = nvv
+                
+        wrong_sent = None
+       
+        for key, v in replaces[different].items():
+            if correct_sent.find(key) != -1:
+                wrong_sent = correct_sent.replace(key, v)
+                return wrong_sent
+        return wrong_sent
+
+
+    def construct_coordinate_possesion_mistake(self, correct_sent):
+        different = 'different'
+        
+        replaces = {
+            different: {' de asemenea ': ' deasmenea ', ' de fapt ': ' defapt ', ' de altfel ': ' dealtfel ', ' nu mai ': ' numai ',
+            ' numai ': ' nu mai ', ' o dată ': ' odată ', ' odată ': ' o dată ', ' în continuu ': ' încontinuu '}
+        }
+
+        for k, v in replaces.items():
+            for kk, vv in replaces.items():
+                nkk = self.replace_space_with_comma(kk)
+                nvv = self.replace_space_with_comma(vv)
+                replaces[k][nkk] = nvv
+                
+        wrong_sent = None
+       
+        for key, v in replaces[different].items():
+            if correct_sent.find(key) != -1:
+                wrong_sent = correct_sent.replace(key, v)
+                return wrong_sent
+        return wrong_sent
+
     def eliminate_one_comma(self, correct_sent):
 
         commas = Counter(list(correct_sent))[","]
@@ -241,16 +301,26 @@ class CorpusGenerator():
 
     def adjust_dash(self, correct_sent):
         """ eliminate dash """
-        all_diacs = "".join([d for d, _ in CorpusGenerator.DIACS.items()])
-        pattern = '[A-Za-z' + all_diacs + ']+-' + '[A-Za-z' + all_diacs + ']'
+        type_dash = random.randint(0, 1)
+        if type_dash == 0:
+            all_diacs = "".join([d for d, _ in CorpusGenerator.DIACS.items()])
+            pattern = '[A-Za-z' + all_diacs + ']+-' + '[A-Za-z' + all_diacs + ']'
 
-        matches = re.findall(pattern, correct_sent)
-        if len(matches) == 0:
-            return None
+            matches = re.findall(pattern, correct_sent)
+            if len(matches) == 0:
+                return None
+            else:
+                match = matches[0]
+            modified = match.replace('-', '')
+            return correct_sent.replace(match, modified)
         else:
-            match = matches[0]
-        modified = match.replace('-', '')
-        return correct_sent.replace(match, modified)
+            """ add dash """
+            # for no_dash_word, dash_word in self.dash_words.items():
+            #     pattern = " " + no_dash_word + " "
+            #     matches = re.findall(pattern, correct_sent)
+            #     if len(matches) > 0:
+            #         match = matches[0]
+            # return correct_sent.replace(match, no_dash_word)
 
     def reconstruct_sent(self, wrong_words):
         reconstructed_sent = ' '.join(wrong_words)
@@ -258,6 +328,17 @@ class CorpusGenerator():
         for k, v in replaces.items():
             reconstructed_sent = reconstructed_sent.replace(k, v)
         return reconstructed_sent
+
+    def pronoun_form(self, tokens):
+        pron_form_i = ['însumi', 'însuți', 'însuși', 'înșine', 'înșivă', 'înșiși', 'însămi', 'însăți',
+                        'însăși', 'însene', 'însevă', 'înseși', 'însele']
+        wrong_words = [token.text for token in tokens]
+        for i, token in enumerate(tokens):
+            if token.text.lower() in pron_form_i:
+                index = random.randint(0, len(pron_form_i) - 1)
+                wrong_words[i] = pron_form_i[index]
+                return self.reconstruct_sent(wrong_words)
+        return None
 
     def construct_mistake(self, tokens, correct_sent, wronged_sents, mistake_type):
         
@@ -271,6 +352,10 @@ class CorpusGenerator():
             wrong_sent = self.eliminate_one_comma(correct_sent)
         elif mistake_type is MistakeType.CR:
             wrong_sent = self.adjust_dash(correct_sent)
+        elif mistake_type is MistakeType.SP:
+            wrong_sent = self.construct_spacing_mistakes(correct_sent)
+        elif mistake_type is MistakeType.PI:
+            wrong_sent = self.pronoun_form(tokens)
         else:
             tries = 0
             """ one word mistakes """
@@ -303,16 +388,13 @@ class CorpusGenerator():
 
         for r in range(nr_mistakes_types):
             line = []
-            if r == 0 and r == args.type:
-                self.construct_mistake(tokens, correct_sent, wronged_sents, mistake_type=MistakeType.TYPO)
-            elif r == 1 and r == args.type:
-                self.construct_mistake(tokens, correct_sent, wronged_sents, mistake_type=MistakeType.DIAC)
-            elif r == 4 and r == args.type:
-                self.construct_mistake(tokens, correct_sent, wronged_sents, mistake_type=MistakeType.PRE)
-            elif r == 5 and r == args.type:
-                self.construct_mistake(tokens, correct_sent, wronged_sents, mistake_type=MistakeType.VIR)
-            elif r == 7 and r == args.type:
-                self.construct_mistake(tokens, correct_sent, wronged_sents, mistake_type=MistakeType.CR)
+            self.construct_mistake(tokens, correct_sent, wronged_sents, mistake_type=MistakeType.TYPO)
+            self.construct_mistake(tokens, correct_sent, wronged_sents, mistake_type=MistakeType.DIAC)
+            self.construct_mistake(tokens, correct_sent, wronged_sents, mistake_type=MistakeType.PRE)
+            self.construct_mistake(tokens, correct_sent, wronged_sents, mistake_type=MistakeType.VIR)
+            self.construct_mistake(tokens, correct_sent, wronged_sents, mistake_type=MistakeType.CR)
+            self.construct_mistake(tokens, correct_sent, wronged_sents, mistake_type=MistakeType.SP)
+            self.construct_mistake(tokens, correct_sent, wronged_sents, mistake_type=MistakeType.PI)
         return wronged_sents
         
     def generate_based_on_features(self):
@@ -336,6 +418,7 @@ if __name__ == "__main__":
     parser.add_argument('--rb_path', dest='rb_path', action='store', default="../readerbenchpy/")
     parser.add_argument('--samples', dest='samples', action='store', default=50, type=int)
     parser.add_argument('--type', dest='type', action='store', default=0, type=int)
+    parser.add_argument('--feature_based', dest='feature_based', action='store_true', default=True)
     args = parser.parse_args()
 
     for k in args.__dict__:
@@ -348,6 +431,8 @@ if __name__ == "__main__":
     from rb.core.document import Document
     from rb.core.pos import POS
     corpusGenerator = CorpusGenerator()
-    corpusGenerator.generate_based_on_features()
+    if args.feature_based:
+        corpusGenerator.pre_computations()
+        corpusGenerator.generate_based_on_features()
     #corpusGenerator.generate()
     #corpusGenerator.test_parser()
