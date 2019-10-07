@@ -266,7 +266,6 @@ class CorpusGenerator():
                 return wrong_sent
         return wrong_sent
 
-
     def construct_coordinate_possesion_mistake(self, correct_sent):
         different = 'different'
         
