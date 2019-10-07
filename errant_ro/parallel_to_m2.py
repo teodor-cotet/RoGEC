@@ -7,12 +7,18 @@ import scripts.align_text as align_text
 import scripts.cat_rules as cat_rules
 import scripts.toolbox as toolbox
 
+
 def main(args):
 	# Get base working directory.
+	import sys
+	sys.path.insert(0, args.rb_path)
+	from rb.parser.spacy_parser import SpacyParser
+	from rb.core.lang import Lang
+
 	basename = os.path.dirname(os.path.realpath(__file__))
 	print("Loading resources...")
 	# Load Tokenizer and other resources
-	nlp = spacy.load("en")
+	spacy_instance = SpacyParser.get_instance()
 	# Lancaster Stemmer
 	stemmer = LancasterStemmer()
 	# GB English word list (inc -ise and -ize)
@@ -36,7 +42,7 @@ def main(args):
 			# Write the original sentence to the output m2 file.
 			out_m2.write("S "+orig_sent+"\n")
 			# Markup the original sentence with spacy (assume tokenized)
-			proc_orig = toolbox.applySpacy(orig_sent.split(), nlp)
+			proc_orig = toolbox.applySpacy(orig_sent, spacy_instance, Lang.RO)
 			# Loop through the corrected sentences
 			for cor_id, cor_sent in enumerate(cor_sents):
 				cor_sent = cor_sent.strip()
@@ -46,13 +52,14 @@ def main(args):
 				# Otherwise, do extra processing.
 				else:
 					# Markup the corrected sentence with spacy (assume tokenized)
-					proc_cor = toolbox.applySpacy(cor_sent.strip().split(), nlp)
+					proc_cor = toolbox.applySpacy(cor_sent.strip(), spacy_instance, Lang.RO)
 					# Auto align the parallel sentences and extract the edits.
 					auto_edits = align_text.getAutoAlignedEdits(proc_orig, proc_cor, args)
 					# Loop through the edits.
 					for auto_edit in auto_edits:
 						# Give each edit an automatic error type.
-						cat = cat_rules.autoTypeEdit(auto_edit, proc_orig, proc_cor, gb_spell, tag_map, nlp, stemmer)
+						#cat = cat_rules.autoTypeEdit(auto_edit, proc_orig, proc_cor, gb_spell, tag_map, nlp, stemmer)
+						cat = 'None'
 						auto_edit[2] = cat
 						# Write the edit to the output m2 file.
 						out_m2.write(toolbox.formatEdit(auto_edit, cor_id)+"\n")
@@ -74,6 +81,8 @@ if __name__ == "__main__":
 							"all-split: Merge nothing; e.g. MSSDI -> M, S, S, D, I\n"
 							"all-merge: Merge adjacent non-matches; e.g. MSSDI -> M, SSDI\n"
 							"all-equal: Merge adjacent same-type non-matches; e.g. MSSDI -> M, SS, D, I")
+	parser.add_argument("-rb_path", dest="rb_path", default="../../readerbenchpy",
+						help="Path to rb path", type=str)
 	args = parser.parse_args()
 	# Run the program.
 	main(args)

@@ -93,11 +93,9 @@ def processEdits(edits):
 # Input 1: A list of token strings in a sentence.
 # Input 2: A preloaded Spacy processing object.
 # Annotate tokens with POS, lemma and parse info.
-def applySpacy(sent, nlp):
+def applySpacy(sent, spacy_instance, lang):
 	# Convert tokens to spacy tokens and POS tag and parse.
-	sent = nlp.tokenizer.tokens_from_list(sent)
-	nlp.tagger(sent)
-	nlp.parser(sent)
+	sent = spacy_instance.parse(sent, lang)
 	return sent
 
 # Input 1: An edit list. [orig_start, orig_end, cat, cor, cor_start, cor_end]

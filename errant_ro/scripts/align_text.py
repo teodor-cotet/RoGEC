@@ -85,8 +85,6 @@ def process_edits(source, target, edits):
 		s = source[edits[start][1]:edits[end][2]]
 		t = target[edits[start][3]:edits[end][4]]
 		# Possessive suffixes merged with previous token: [friends -> friend 's]
-		if s[-1].tag_ == "POS" or t[-1].tag_ == "POS":
-			return process_edits(source, target, edits[:end-1]) + merge_edits(edits[end-1:end+1]) + process_edits(source, target, edits[end+1:])
 		# Case changes
 		if s[-1].lower_ == t[-1].lower_:
 			# Merge first token I or D of arbitrary length: [Cat -> The big cat]
