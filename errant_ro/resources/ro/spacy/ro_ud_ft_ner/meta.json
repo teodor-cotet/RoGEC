@@ -1,0 +1,31 @@
+{
+  "lang":"ro",
+  "pipeline":[
+    "tagger",
+    "parser",
+    "ner"
+  ],
+  "spacy_version":">=2.1.3",
+  "speed":{
+    "nwords":17074,
+    "cpu":12827.4935104872,
+    "gpu":12414.7819814939
+  },
+  "accuracy":{
+    "uas":88.9090786729,
+    "las":81.559997308,
+    "ents_p":0.0,
+    "ents_r":0.0,
+    "ents_f":0.0,
+    "tags_acc":97.2004216938,
+    "token_acc":100.0
+  },
+  "vectors":{
+    "width":300,
+    "vectors":37511,
+    "keys":37511,
+    "name":"ro_model.vectors"
+  },
+  "name":"model0",
+  "version":"0.0.0"
+}

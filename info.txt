@@ -15,380 +15,126 @@ from andrew paper:
     -evaluated on how well its proposed corrections or edits match the gold-standard edits
     -scores for n-grams to detect errors
 
-sent_gru + word + predict word:
-
-# this should be reruned as it was runed on a different corpus
-inflected:
-    dictionary: 50k
-    samples: 50k
-    char gru:
-        Epoch 1/100
-        59052/59052 [==============================] - 335s 6ms/sample - loss: 8.8443 - acc: 0.0219 - val_loss: 8.9247 - val_acc: 0.0226
-        Epoch 2/100
-        59052/59052 [==============================] - 360s 6ms/sample - loss: 8.2922 - acc: 0.0221 - val_loss: 8.9121 - val_acc: 0.0226
-        Epoch 3/100
-        59052/59052 [==============================] - 308s 5ms/sample - loss: 8.2778 - acc: 0.0215 - val_loss: 8.9068 - val_acc: 0.0226
-        Epoch 4/100
-        59052/59052 [==============================] - 304s 5ms/sample - loss: 8.2748 - acc: 0.0219 - val_loss: 8.9017 - val_acc: 0.0172
-        Epoch 5/100
-        59052/59052 [==============================] - 306s 5ms/sample - loss: 8.2772 - acc: 0.0211 - val_loss: 8.9099 - val_acc: 0.0175
-        Epoch 6/100
-        59052/59052 [==============================] - 304s 5ms/sample - loss: 8.2781 - acc: 0.0224 - val_loss: 8.9070 - val_acc: 0.0172
-        Epoch 7/100
-        59052/59052 [==============================] - 335s 6ms/sample - loss: 8.2739 - acc: 0.0215 - val_loss: 8.9153 - val_acc: 0.0226
-        Epoch 8/100
-        59052/59052 [==============================] - 281s 5ms/sample - loss: 7.9822 - acc: 0.0292 - val_loss: 8.0664 - val_acc: 0.0668
-        Epoch 9/100
-        59052/59052 [==============================] - 267s 5ms/sample - loss: 6.6071 - acc: 0.1153 - val_loss: 6.6840 - val_acc: 0.1484
-        Epoch 10/100
-        59052/59052 [==============================] - 291s 5ms/sample - loss: 5.3858 - acc: 0.2007 - val_loss: 5.8801 - val_acc: 0.2264
-        Epoch 11/100
-        59052/59052 [==============================] - 294s 5ms/sample - loss: 4.5594 - acc: 0.2693 - val_loss: 5.2993 - val_acc: 0.2822
-        Epoch 12/100
-        59052/59052 [==============================] - 291s 5ms/sample - loss: 3.9792 - acc: 0.3204 - val_loss: 4.8994 - val_acc: 0.3269
-        Epoch 13/100
-        59052/59052 [==============================] - 295s 5ms/sample - loss: 3.5412 - acc: 0.3665 - val_loss: 4.5591 - val_acc: 0.3657
-        Epoch 14/100
-        59052/59052 [==============================] - 295s 5ms/sample - loss: 3.2018 - acc: 0.4008 - val_loss: 4.3497 - val_acc: 0.3902
-        Epoch 15/100
-        59052/59052 [==============================] - 768s 13ms/sample - loss: 2.9457 - acc: 0.4248 - val_loss: 4.1486 - val_acc: 0.4183
-        Epoch 16/100
-        59052/59052 [==============================] - 418s 7ms/sample - loss: 2.7338 - acc: 0.4497 - val_loss: 4.0471 - val_acc: 0.4218
-        Epoch 17/100
-        59052/59052 [==============================] - 269s 5ms/sample - loss: 2.5569 - acc: 0.4690 - val_loss: 3.9246 - val_acc: 0.4380
-        Epoch 18/100
-        59052/59052 [==============================] - 263s 4ms/sample - loss: 2.4139 - acc: 0.4831 - val_loss: 3.8508 - val_acc: 0.4480
-        Epoch 19/100
-        59052/59052 [==============================] - 256s 4ms/sample - loss: 2.2900 - acc: 0.5015 - val_loss: 3.8010 - val_acc: 0.4552
-        Epoch 20/100
-        59052/59052 [==============================] - 266s 5ms/sample - loss: 2.1916 - acc: 0.5106 - val_loss: 3.7491 - val_acc: 0.4604
-        Epoch 21/100
-        59052/59052 [==============================] - 388s 7ms/sample - loss: 2.0961 - acc: 0.5263 - val_loss: 3.6927 - val_acc: 0.4693
-        Epoch 22/100
-        59052/59052 [==============================] - 278s 5ms/sample - loss: 2.0159 - acc: 0.5378 - val_loss: 3.6618 - val_acc: 0.4777
-        Epoch 23/100
-        59052/59052 [==============================] - 256s 4ms/sample - loss: 1.9425 - acc: 0.5501 - val_loss: 3.6281 - val_acc: 0.4804
-        Epoch 24/100
-        59052/59052 [==============================] - 255s 4ms/sample - loss: 1.8795 - acc: 0.5609 - val_loss: 3.5933 - val_acc: 0.4867
-        Epoch 25/100
-        59052/59052 [==============================] - 255s 4ms/sample - loss: 1.8345 - acc: 0.5696 - val_loss: 3.5575 - val_acc: 0.4909
-        Epoch 26/100
-        59052/59052 [==============================] - 257s 4ms/sample - loss: 1.7693 - acc: 0.5827 - val_loss: 3.5666 - val_acc: 0.4947
-        Epoch 27/100
-        59052/59052 [==============================] - 255s 4ms/sample - loss: 1.7256 - acc: 0.5926 - val_loss: 3.5641 - val_acc: 0.4848
-        Epoch 28/100
-        59052/59052 [==============================] - 249s 4ms/sample - loss: 1.6848 - acc: 0.6006 - val_loss: 3.5583 - val_acc: 0.4962
-        Epoch 29/100
-        59052/59052 [==============================] - 249s 4ms/sample - loss: 1.6485 - acc: 0.6085 - val_loss: 3.5271 - val_acc: 0.4966
-        Epoch 30/100
-        59052/59052 [==============================] - 648s 11ms/sample - loss: 1.6046 - acc: 0.6198 - val_loss: 3.5186 - val_acc: 0.4972
-        Epoch 31/100
-        59052/59052 [==============================] - 243s 4ms/sample - loss: 1.5769 - acc: 0.6285 - val_loss: 3.5007 - val_acc: 0.5003
-        Epoch 32/100
-        59052/59052 [==============================] - 234s 4ms/sample - loss: 1.5473 - acc: 0.6341 - val_loss: 3.5102 - val_acc: 0.5039
-        Epoch 33/100
-        59052/59052 [==============================] - 237s 4ms/sample - loss: 1.5194 - acc: 0.6408 - val_loss: 3.5371 - val_acc: 0.4948
-        Epoch 34/100
-        59052/59052 [==============================] - 237s 4ms/sample - loss: 1.4944 - acc: 0.6476 - val_loss: 3.4810 - val_acc: 0.5118
-        Epoch 35/100
-        59052/59052 [==============================] - 235s 4ms/sample - loss: 1.4577 - acc: 0.6567 - val_loss: 3.4837 - val_acc: 0.5131
-        Epoch 36/100
-        59052/59052 [==============================] - 237s 4ms/sample - loss: 1.4359 - acc: 0.6627 - val_loss: 3.4917 - val_acc: 0.5050
-        Epoch 37/100
-        59052/59052 [==============================] - 233s 4ms/sample - loss: 1.4187 - acc: 0.6671 - val_loss: 3.4906 - val_acc: 0.5085
-        Epoch 38/100
-        59052/59052 [==============================] - 234s 4ms/sample - loss: 1.3895 - acc: 0.6751 - val_loss: 3.4792 - val_acc: 0.5144
-        Epoch 39/100
-        59052/59052 [==============================] - 235s 4ms/sample - loss: 1.3738 - acc: 0.6809 - val_loss: 3.5223 - val_acc: 0.5014
-        Epoch 40/100
-        59052/59052 [==============================] - 234s 4ms/sample - loss: 1.3542 - acc: 0.6848 - val_loss: 3.5281 - val_acc: 0.5015
-        Epoch 41/100
-        59052/59052 [==============================] - 235s 4ms/sample - loss: 1.3394 - acc: 0.6890 - val_loss: 3.5039 - val_acc: 0.5085
-        Epoch 42/100
-        59052/59052 [==============================] - 234s 4ms/sample - loss: 1.3209 - acc: 0.6939 - val_loss: 3.4857 - val_acc: 0.5106
-        Epoch 43/100
-        59052/59052 [==============================] - 233s 4ms/sample - loss: 1.3061 - acc: 0.6971 - val_loss: 3.5091 - val_acc: 0.5037
-        Epoch 44/100
-        59052/59052 [==============================] - 234s 4ms/sample - loss: 1.2843 - acc: 0.7038 - val_loss: 3.5056 - val_acc: 0.5119
-        Epoch 45/100
-        59052/59052 [==============================] - 234s 4ms/sample - loss: 1.2745 - acc: 0.7072 - val_loss: 3.4904 - val_acc: 0.5143
-        Epoch 46/100
-        59052/59052 [==============================] - 321s 5ms/sample - loss: 1.2613 - acc: 0.7088 - val_loss: 3.5156 - val_acc: 0.5107
-    sent gru + char gru:
-        Epoch 1/100
-        59052/59052 [==============================] - 118s 2ms/sample - loss: 8.8431 - acc: 0.0210 - val_loss: 8.9415 - val_acc: 0.0226
-        Epoch 2/100
-        59052/59052 [==============================] - 108s 2ms/sample - loss: 8.2876 - acc: 0.0215 - val_loss: 8.9443 - val_acc: 0.0226
-        Epoch 3/100
-        59052/59052 [==============================] - 107s 2ms/sample - loss: 8.2737 - acc: 0.0216 - val_loss: 8.9404 - val_acc: 0.0172
-        Epoch 4/100
-        59052/59052 [==============================] - 153s 3ms/sample - loss: 8.2730 - acc: 0.0222 - val_loss: 8.9604 - val_acc: 0.0226
-        Epoch 5/100
-        59052/59052 [==============================] - 190s 3ms/sample - loss: 8.2708 - acc: 0.0215 - val_loss: 8.9288 - val_acc: 0.0226
-        Epoch 6/100
-        59052/59052 [==============================] - 191s 3ms/sample - loss: 8.2703 - acc: 0.0219 - val_loss: 8.9347 - val_acc: 0.0172
-        Epoch 7/100
-        59052/59052 [==============================] - 192s 3ms/sample - loss: 8.2695 - acc: 0.0215 - val_loss: 8.9523 - val_acc: 0.0172
-        Epoch 8/100
-        59052/59052 [==============================] - 193s 3ms/sample - loss: 8.1749 - acc: 0.0223 - val_loss: 8.4752 - val_acc: 0.0377
-        Epoch 9/100
-        59052/59052 [==============================] - 192s 3ms/sample - loss: 7.0359 - acc: 0.0797 - val_loss: 7.1869 - val_acc: 0.1284
-        Epoch 10/100
-        59052/59052 [==============================] - 192s 3ms/sample - loss: 5.7868 - acc: 0.1706 - val_loss: 6.2086 - val_acc: 0.1834
-        Epoch 11/100
-        59052/59052 [==============================] - 190s 3ms/sample - loss: 4.9077 - acc: 0.2385 - val_loss: 5.5084 - val_acc: 0.2654
-        Epoch 12/100
-        59052/59052 [==============================] - 157s 3ms/sample - loss: 4.2586 - acc: 0.2945 - val_loss: 5.0846 - val_acc: 0.3032
-        Epoch 13/100
-        59052/59052 [==============================] - 164s 3ms/sample - loss: 3.7887 - acc: 0.3415 - val_loss: 4.7213 - val_acc: 0.3516
-        Epoch 14/100
-        59052/59052 [==============================] - 192s 3ms/sample - loss: 3.4206 - acc: 0.3791 - val_loss: 4.4804 - val_acc: 0.3714
-        Epoch 15/100
-        59052/59052 [==============================] - 193s 3ms/sample - loss: 3.1496 - acc: 0.4013 - val_loss: 4.3087 - val_acc: 0.3925
-        Epoch 16/100
-        59052/59052 [==============================] - 192s 3ms/sample - loss: 2.9356 - acc: 0.4229 - val_loss: 4.1402 - val_acc: 0.4133
-        Epoch 17/100
-        59052/59052 [==============================] - 193s 3ms/sample - loss: 2.7588 - acc: 0.4423 - val_loss: 4.0834 - val_acc: 0.4071
-        Epoch 18/100
-        59052/59052 [==============================] - 193s 3ms/sample - loss: 2.6220 - acc: 0.4562 - val_loss: 3.9551 - val_acc: 0.4340
-        Epoch 19/100
-        59052/59052 [==============================] - 194s 3ms/sample - loss: 2.5086 - acc: 0.4702 - val_loss: 3.9130 - val_acc: 0.4387
-        Epoch 20/100
-        59052/59052 [==============================] - 193s 3ms/sample - loss: 2.4037 - acc: 0.4830 - val_loss: 3.8379 - val_acc: 0.4452
-        Epoch 21/100
-        59052/59052 [==============================] - 156s 3ms/sample - loss: 2.3178 - acc: 0.4946 - val_loss: 3.7788 - val_acc: 0.4561
-        Epoch 22/100
-        59052/59052 [==============================] - 153s 3ms/sample - loss: 2.2438 - acc: 0.5025 - val_loss: 3.7517 - val_acc: 0.4558
-        Epoch 23/100
-        59052/59052 [==============================] - 193s 3ms/sample - loss: 2.1690 - acc: 0.5097 - val_loss: 3.6956 - val_acc: 0.4684
-        Epoch 24/100
-        59052/59052 [==============================] - 194s 3ms/sample - loss: 2.1188 - acc: 0.5170 - val_loss: 3.6684 - val_acc: 0.4739
-        Epoch 25/100
-        59052/59052 [==============================] - 192s 3ms/sample - loss: 2.0598 - acc: 0.5266 - val_loss: 3.6313 - val_acc: 0.4772
-        Epoch 26/100
-        59052/59052 [==============================] - 193s 3ms/sample - loss: 2.0163 - acc: 0.5342 - val_loss: 3.5728 - val_acc: 0.4880
-        Epoch 27/100
-        59052/59052 [==============================] - 191s 3ms/sample - loss: 1.9629 - acc: 0.5406 - val_loss: 3.5933 - val_acc: 0.4824
-        Epoch 28/100
-        59052/59052 [==============================] - 194s 3ms/sample - loss: 1.9362 - acc: 0.5450 - val_loss: 3.5539 - val_acc: 0.4911
-        Epoch 29/100
-        59052/59052 [==============================] - 191s 3ms/sample - loss: 1.8842 - acc: 0.5547 - val_loss: 3.5238 - val_acc: 0.4919
-        Epoch 30/100
-        59052/59052 [==============================] - 169s 3ms/sample - loss: 1.8595 - acc: 0.5575 - val_loss: 3.5343 - val_acc: 0.4913
-        Epoch 31/100
-        59052/59052 [==============================] - 157s 3ms/sample - loss: 1.8201 - acc: 0.5650 - val_loss: 3.5148 - val_acc: 0.4923
-        Epoch 32/100
-        59052/59052 [==============================] - 194s 3ms/sample - loss: 1.8006 - acc: 0.5694 - val_loss: 3.4712 - val_acc: 0.5081
-        Epoch 33/100
-        59052/59052 [==============================] - 193s 3ms/sample - loss: 1.7687 - acc: 0.5741 - val_loss: 3.4806 - val_acc: 0.5022
-        Epoch 34/100
-        59052/59052 [==============================] - 193s 3ms/sample - loss: 1.7377 - acc: 0.5816 - val_loss: 3.4857 - val_acc: 0.5062
-        Epoch 35/100
-        59052/59052 [==============================] - 195s 3ms/sample - loss: 1.7183 - acc: 0.5864 - val_loss: 3.4750 - val_acc: 0.4997
-        Epoch 36/100
-        59052/59052 [==============================] - 194s 3ms/sample - loss: 1.6932 - acc: 0.5898 - val_loss: 3.4491 - val_acc: 0.5116
-        Epoch 37/100
-        59052/59052 [==============================] - 192s 3ms/sample - loss: 1.6799 - acc: 0.5924 - val_loss: 3.4802 - val_acc: 0.5049
-        Epoch 38/100
-        59052/59052 [==============================] - 192s 3ms/sample - loss: 1.6627 - acc: 0.5961 - val_loss: 3.4606 - val_acc: 0.5091
-        Epoch 39/100
-        59052/59052 [==============================] - 166s 3ms/sample - loss: 1.6423 - acc: 0.5996 - val_loss: 3.4611 - val_acc: 0.5081
-        Epoch 40/100
-        59052/59052 [==============================] - 151s 3ms/sample - loss: 1.6223 - acc: 0.6062 - val_loss: 3.4419 - val_acc: 0.5122
-        Epoch 42/100
-        59052/59052 [==============================] - 192s 3ms/sample - loss: 1.5964 - acc: 0.6132 - val_loss: 3.4523 - val_acc: 0.5033
-        Epoch 43/100
-        59052/59052 [==============================] - 195s 3ms/sample - loss: 1.5734 - acc: 0.6176 - val_loss: 3.4505 - val_acc: 0.5100
-        Epoch 44/100
-        59052/59052 [==============================] - 193s 3ms/sample - loss: 1.5587 - acc: 0.6193 - val_loss: 3.4402 - val_acc: 0.5079
-        Epoch 45/100
-        59052/59052 [==============================] - 192s 3ms/sample - loss: 1.5466 - acc: 0.6255 - val_loss: 3.4228 - val_acc: 0.5147
-        Epoch 46/100
-        59052/59052 [==============================] - 194s 3ms/sample - loss: 1.5356 - acc: 0.6269 - val_loss: 3.4526 - val_acc: 0.5123
-        Epoch 47/100
-        59052/59052 [==============================] - 194s 3ms/sample - loss: 1.5155 - acc: 0.6323 - val_loss: 3.4273 - val_acc: 0.5184
-        Epoch 48/100
-        59052/59052 [==============================] - 172s 3ms/sample - loss: 1.5158 - acc: 0.6306 - val_loss: 3.4268 - val_acc: 0.5178
-        Epoch 49/100
-        59052/59052 [==============================] - 158s 3ms/sample - loss: 1.5026 - acc: 0.6334 - val_loss: 3.4741 - val_acc: 0.5049
-        Epoch 50/100
-        59052/59052 [==============================] - 182s 3ms/sample - loss: 1.4811 - acc: 0.6399 - val_loss: 3.5053 - val_acc: 0.5014
-        Epoch 51/100
-        59052/59052 [==============================] - 191s 3ms/sample - loss: 1.4750 - acc: 0.6420 - val_loss: 3.4235 - val_acc: 0.5144
-        Epoch 52/100
-        59052/59052 [==============================] - 189s 3ms/sample - loss: 1.4638 - acc: 0.6452 - val_loss: 3.4309 - val_acc: 0.5150
-        Epoch 53/100
-        59052/59052 [==============================] - 191s 3ms/sample - loss: 1.4537 - acc: 0.6479 - val_loss: 3.4420 - val_acc: 0.5142
-
-typo: 
-    dictionary: 160k
-    samples: 500k
-    char gru:
-        Epoch 1/100:
-        488072/488072 [==============================] - 3969s 8ms/sample - loss: 8.6454 - acc: 0.0311 - val_loss: 8.6699 - val_acc: 0.0332
-        Epoch 2/100
-        488072/488072 [==============================] - 3774s 8ms/sample - loss: 6.9485 - acc: 0.1437 - val_loss: 5.6901 - val_acc: 0.2859
-        Epoch 3/100
-        488072/488072 [==============================] - 3756s 8ms/sample - loss: 4.2375 - acc: 0.4296 - val_loss: 3.7179 - val_acc: 0.5287
-        Epoch 4/100
-        488072/488072 [==============================] - 3778s 8ms/sample - loss: 2.9240 - acc: 0.5856 - val_loss: 3.0260 - val_acc: 0.6208
-        Epoch 5/100
-        488072/488072 [==============================] - 3756s 8ms/sample - loss: 2.3145 - acc: 0.6577 - val_loss: 2.7221 - val_acc: 0.6590
-        Epoch 6/100
-        488072/488072 [==============================] - 3773s 8ms/sample - loss: 1.9686 - acc: 0.6995 - val_loss: 2.5238 - val_acc: 0.6913
-        Epoch 7/100
-        488072/488072 [==============================] - 3770s 8ms/sample - loss: 1.7413 - acc: 0.7287 - val_loss: 2.4223 - val_acc: 0.7037
-        Epoch 8/100
-        488072/488072 [==============================] - 3773s 8ms/sample - loss: 1.5755 - acc: 0.7502 - val_loss: 2.3417 - val_acc: 0.7163
-        Epoch 9/100
-        488072/488072 [==============================] - 3752s 8ms/sample - loss: 1.4496 - acc: 0.7675 - val_loss: 2.3060 - val_acc: 0.7206
-        Epoch 10/100
-        488072/488072 [==============================] - 3744s 8ms/sample - loss: 1.3499 - acc: 0.7815 - val_loss: 2.2666 - val_acc: 0.7279
-        Epoch 11/100
-        488072/488072 [==============================] - 3646s 7ms/sample - loss: 1.2699 - acc: 0.7927 - val_loss: 2.2287 - val_acc: 0.7334
-        ....TODO
-    without_chars:
+abbraviations:
+    WMT: workshop machien translation
+    LM: lamguage model
+    NMT: Neural Machine Translation
 
 
-new corpus:
------------------
-detect:
-    inflected:
-        all - dropout 0.1 100k examples
-            Epoch 1/100
-            1051884/1051884 [==============================] - 2070s 2ms/sample - loss: 0.3205 - acc: 0.8476 - val_loss: 0.2583 - val_acc: 0.8815
-            Epoch 2/100
-            1051884/1051884 [==============================] - 2059s 2ms/sample - loss: 0.2072 - acc: 0.9087 - val_loss: 0.2481 - val_acc: 0.8933
-            Epoch 3/100
-            1051884/1051884 [==============================] - 2059s 2ms/sample - loss: 0.1587 - acc: 0.9341 - val_loss: 0.2753 - val_acc: 0.8923
-            Epoch 4/100
-            1051884/1051884 [==============================] - 2061s 2ms/sample - loss: 0.1280 - acc: 0.9489 - val_loss: 0.3093 - val_acc: 0.8904
-            Epoch 5/100
-            1051884/1051884 [==============================] - 2063s 2ms/sample - loss: 0.1090 - acc: 0.9578 - val_loss: 0.3317 - val_acc: 0.8900
-            Epoch 6/100
-            1051884/1051884 [=======
+datasets:
+        Corpus          #sent pair    mentions
+        WMT News crawl  100M english  also for ro         
+        Gutenberg       11.6M         0 ann
+        Tatoeba         1.17M         0 ann
+        WikiText-103    3.93M         0 ann
+        Lang-8          1,114,139     1-8
+        CLC             1,366,075     1/private
+        NUCLE           57,119        1  
+        Extended Lang-8 2,865,639     1 
+        FCE             33,200        1
+        W&I Train       34,308        1 annotations
+        W&I+LOCNESS Dev 4,384         1 annotations
+        W&I+L-Test      4,480         5 ANNOT
+
+challanges:
+    CoNLL-2014 Shared Task - eval on NUCLE corpus (+10 annotations) + M^2
+    JFLEG: 700 sents - GLEU
+    BEA: (eval with ERRANT) 
+        unrestricted:   proprietary  & all u want
+        restricted:     only on FCE, Lang-8, NUCLE, W&I+LOCNESS, NO parallel
+        low resource:   only W&I+LOCNESS dev set (no other datatset) but  parallel is fine (wiki)
+
+papers:
+    BEA:
+        low resource:
+            Neural Grammatical Error Correction Systems with UnsupervisedPre-training on Synthetic Data:
+                -Microsoft: Roman Grundkiewicz, Marcin Junczys-Dowmunt, Kenneth Heafield†:
+                -synthetic data: replace words with confusions sets, constructing confusions set with spellchekers
+                        +swapping, deleting words + wikipedia edits 
+                -spellchecker based replacing works better than word embeddings or Levensthein dist
+                -very detailed work on the model & other stuff (transfformer)
+                Interestingly, the performance of restricted and low-resourcse systems on native texts is identical
+            The LAIX Systems in the BEA-2019 GEC Shared Task
+                -Ruobing Li, Chuan Wang, Yefei Zha, Yonghong Yu, Shiman Guo, Qiang Wang, Yang Liu† Hui Lin†
+                -combine classifiers, rules, spell checker and NMT model -> solver 
+                -for some error types classfiers trained on NATIVE text have good performance 
+                    (labels for each classificator depends on part-of-speech tags)
+                    -classifiers (fixed labels nr):
+                        -7 error types: subj-ver agr, prep subst, missing comma, verb form 
+                        -for word form use the pointer context model (interesting diff labels for each word)
+                -for NMT use wiki ed
+            Weakly Supervised Grammatical Error Correction using Iterative Decoding
+                -Google: Jared Lichtarge, Christopher Alberti, Shankar Kumar, Noam Shazeer, Niki Parmar
+                -wikipedia + random char errors only (incremental decoding)
+                -after training only on wikipedia, continue to train on Lang 8 corous
+            !!A Neural Grammatical Error Correction System Built On Better Pre-training and Sequential Transfer Learning
+                Yo Joong Choe, Kakao company, Jiyeon Ham*
+                -To tackle this challenge, we first generate erroneous versions of large unannotated corpora using a realistic
+                     noising function. The resulting parallel corpora are subsequently used to pre-train Transformer models.
+                    Then, by sequentially applying transfer
+                    learning, we adapt these models to the domain and style of the test set
+
+    
+how to annotate:
+    1. categories - mandatory - how to define them - diacritics vs spelling
+    2. classify proficeny of the writer (maybe grade?) 
+    3. tool - see NUCLE corpus
+        3. select span (minimum that defines the error) -> correct (can overlap)
+            (e annotators were asked to select the minimal text span so that minimal changes were made to
+                arrive at the corrected text.)
 
 
-        word - dropout 0.2 100ksamples - 1 dense
-            1030524/1030524 [==============================] - 53s 52us/sample - loss: 0.3889 - acc: 0.8055 - val_loss: 0.3776 - val_acc: 0.8117
-            Epoch 3/100
-            1030524/1030524 [==============================] - 51s 50us/sample - loss: 0.3815 - acc: 0.8108 - val_loss: 0.3747 - val_acc: 0.8125
-            Epoch 4/100
-            1030524/1030524 [==============================] - 51s 49us/sample - loss: 0.3769 - acc: 0.8130 - val_loss: 0.3695 - val_acc: 0.8173
-            Epoch 5/100
-            1030524/1030524 [==============================] - 51s 49us/sample - loss: 0.3739 - acc: 0.8155 - val_loss: 0.3674 - val_acc: 0.8181
-            Epoch 6/100
-            1030524/1030524 [==============================] - 51s 49us/sample - loss: 0.3712 - acc: 0.8169 - val_loss: 0.3669 - val_acc: 0.8184
-            Epoch 7/100
-            1030524/1030524 [==============================] - 51s 49us/sample - loss: 0.3689 - acc: 0.8183 - val_loss: 0.3669 - val_acc: 0.8207
-            Epoch 8/100
-            1030524/1030524 [==============================] - 50s 49us/sample - loss: 0.3680 - acc: 0.8187 - val_loss: 0.3652 - val_acc: 0.8190
-            Epoch 9/100
-            1030524/1030524 [==============================] - 51s 49us/sample - loss: 0.3664 - acc: 0.8196 - val_loss: 0.3651 - val_acc: 0.8201
-            Epoch 10/100
-            1030524/1030524 [==============================] - 50s 49us/sample - loss: 0.3652 - acc: 0.8203 - val_loss: 0.3635 - val_acc: 0.8189
-            Epoch 11/100
-            1030524/1030524 [==============================] - 50s 49us/sample - loss: 0.3641 - acc: 0.8212 - val_loss: 0.3634 - val_acc: 0.8199
-            Epoch 12/100
-            1030524/1030524 [==============================] - 51s 49us/sample - loss: 0.3638 - acc: 0.8216 - val_loss: 0.3640 - val_acc: 0.8189
-            Epoch 13/100
-            1030524/1030524 [==============================] - 51s 49us/sample - loss: 0.3626 - acc: 0.8226 - val_loss: 0.3630 - val_acc: 0.8211
-            Epoch 14/100
-            1030524/1030524 [==============================] - 50s 49us/sample - loss: 0.3623 - acc: 0.8231 - val_loss: 0.3646 - val_acc: 0.8191
-            Epoch 15/100
-            1030524/1030524 [==============================] - 50s 49us/sample - loss: 0.3617 - acc: 0.8232 - val_loss: 0.3665 - val_acc: 0.8169
-            Epoch 16/100
-            1030524/1030524 [==============================] - 51s 49us/sample - loss: 0.3613 - acc: 0.8232 - val_loss: 0.3628 - val_acc: 0.8199
-            Epoch 17/100
-            1030524/1030524 [==============================] - 50s 49us/sample - loss: 0.3608 - acc: 0.8237 - val_loss: 0.3621 - val_acc: 0.8198
-            Epoch 18/100
-            1030524/1030524 [==============================] - 50s 49us/sample - loss: 0.3607 - acc: 0.8235 - val_loss: 0.3619 - val_acc: 0.8213
-            Epoch 19/100
-            1030524/1030524 [==============================] - 50s 49us/sample - loss: 0.3601 - acc: 0.8242 - val_loss: 0.3632 - val_acc: 0.8176
-            Epoch 20/100
-            1030524/1030524 [==============================] - 50s 49us/sample - loss: 0.3598 - acc: 0.8241 - val_loss: 0.3625 - val_acc: 0.8206
-            Epoch 21/100
-            1030524/1030524 [==============================] - 50s 49us/sample - loss: 0.3596 - acc: 0.8243 - val_loss: 0.3616 - val_acc: 0.8203
-            Epoch 22/100
-            1030524/1030524 [==============================] - 50s 49us/sample - loss: 0.3591 - acc: 0.8245 - val_loss: 0.3642 - val_acc: 0.8189
-            Epoch 23/100
-            1030524/1030524 [==============================] - 50s 49us/sample - loss: 0.3592 - acc: 0.8246 - val_loss: 0.3630 - val_acc: 0.8194
-            Epoch 24/100
-            1030524/1030524 [==============================] - 50s 49us/sample - loss: 0.3591 - acc: 0.8247 - val_loss: 0.3617 - val_acc: 0.8205
-            Epoch 25/100
-            1030524/1030524 [==============================] - 50s 49us/sample - loss: 0.3585 - acc: 0.8245 - val_loss: 0.3635 - val_acc: 0.8199
-                    tp: {}, tn: {}, fp: {}, fn: {} 16359 15057 4536 3036
-            precision: 0.7829145728643216, recall: 0.8434648105181748, f1score: 0.7943190094683177
-        all: 300k examples:
-            Epoch 1/100
-            3071724/3071724 [==============================] - 5980s 2ms/sample - loss: 0.2695 - acc: 0.8746 - val_loss: 0.2120 - val_acc: 0.9077
-            Epoch 2/100
-            3071724/3071724 [==============================] - 6088s 2ms/sample - loss: 0.1905 - acc: 0.9174 - val_loss: 0.1864 - val_acc: 0.9225
-            Epoch 3/100
-            3071724/3071724 [==============================] - 6082s 2ms/sample - loss: 0.1642 - acc: 0.9307 - val_loss: 0.1835 - val_acc: 0.9240
-            Epoch 4/100
-            3071724/3071724 [==============================] - 6104s 2ms/sample - loss: 0.1517 - acc: 0.9369 - val_loss: 0.1826 - val_acc: 0.9258
-            Epoch 5/100
-            3071724/3071724 [==============================] - 6111s 2ms/sample - loss: 0.1442 - acc: 0.9405 - val_loss: 0.1834 - val_acc: 0.9268
-            Epoch 6/100
-            3071724/3071724 [==============================] - 6123s 2ms/sample - loss: 0.1392 - acc: 0.9429 - val_loss: 0.1848 - val_acc: 0.9265
-            Epoch 7/100
-            3071724/3071724 [==============================] - 6127s 2ms/sample - loss: 0.1359 - acc: 0.9445 - val_loss: 0.1845 - val_acc: 0.9264
-            Epoch 8/100
-            3071724/3071724 [==============================] - 6126s 2ms/sample - loss: 0.1335 - acc: 0.9459 - val_loss: 0.1806 - val_acc: 0.9274
-            Epoch 9/100
-            3071724/3071724 [==============================] - 6133s 2ms/sample - loss: 0.1319 - acc: 0.9467 - val_loss: 0.1832 - val_acc: 0.9267
-            Epoch 10/100
-            3071724/3071724 [==============================] - 6121s 2ms/sample - loss: 0.1307 - acc: 0.9473 - val_loss: 0.1904 - val_acc: 0.9269
-            Epoch 11/100
-            3071724/3071724 [==============================] - 6123s 2ms/sample - loss: 0.1306 - acc: 0.9474 - val_loss: 0.1862 - val_acc: 0.9271
-            Epoch 12/100
-            3071724/3071724 [==============================] - 6133s 2ms/sample - loss: 0.1300 - acc: 0.9476 - val_loss: 0.1861 - val_acc: 0.9270
-            Counter({1: 62685, 0: 54676})
-            3
-            tp: {}, tn: {}, fp: {}, fn: {} 57008 51258 5677 3418
-            precision: 0.9094360692350643, recall: 0.9434349452222554, f1score: 0.9160383846564214
-            Counter({1: 2026808, 0: 1812848})
+stats CNA:
 
-            fot other threshold:
-                thr  | prec  | rec   | f0.5
-                0.50   0.909   0.943   0.916
-                0.40   0.926   0.933   0.928
-                0.25   0.947   0.915   0.940
-                0.10   0.971   0.879   0.951
+    phrases:
+        del:
+            multor șlagăre	popular/cântecelor populare și al șlagărelor	sintaxă	Sintaxă: Dezacord al articolului genitival.
+            o poză șocantă, dezvăluită recent	o poză șocantă, apărută recent	other	semantică
+            un avion Airbus cu peste 149 de pasageri la bord	un avion Airbus cu 149 de pasageri la bord	semantică	Semantică: Formulare ilogică avionul avea exact 149 de pasageri.
+            dar o întrebare pentru doamna Iolanda?	dar o întrebare pentru doamna Iolanda Balaș?	stilistică	Stilistică: Adresarea sau referirea la o persoană doar prin numele mic, chiar și precedat de doamna, domnul(e), are un grad de politețe redus.
 
-            architecture:
-                Layer (type)                    Output Shape         Param #     Connected to
-                ==================================================================================================
-                input_3 (InputLayer)            (None, 29)           0
-                __________________________________________________________________________________________________
-                input_1 (InputLayer)            (None, 18, 300)      0
-                __________________________________________________________________________________________________
-                embedding (Embedding)           (None, 29, 28)       16828       input_3[0][0]
-                __________________________________________________________________________________________________
-                bidirectional (Bidirectional)   (None, 128)          140160      input_1[0][0]
-                __________________________________________________________________________________________________
-                input_2 (InputLayer)            (None, 300)          0
-                __________________________________________________________________________________________________
-                bidirectional_1 (Bidirectional) (None, 128)          35712       embedding[0][0]
-                __________________________________________________________________________________________________
-                concatenate (Concatenate)       (None, 556)          0           bidirectional[0][0]
-                                                                                input_2[0][0]
-                                                                                bidirectional_1[0][0]
-                __________________________________________________________________________________________________
-                dropout (Dropout)               (None, 556)          0           concatenate[0][0]
-                __________________________________________________________________________________________________
-                dense (Dense)                   (None, 128)          71296       dropout[0][0]
-                __________________________________________________________________________________________________
-                dropout_1 (Dropout)             (None, 128)          0           dense[0][0]
-                __________________________________________________________________________________________________
-                dense_1 (Dense)                 (None, 64)           8256        dropout_1[0][0]
-                __________________________________________________________________________________________________
-                dense_2 (Dense)                 (None, 2)            130         dense_1[0][0]
-                ==================================================================================================
-                Total params: 272,382
-                Trainable params: 272,382
-                Non-trainable params: 0
+        duplicates:
+            economist șef BNR	economist-șef la/al BNR	ortografie
+            Uită-te la emisiunea unui nord-vestist /	Uită-te la emisiunea unui prezentator nord-vestic
+            discuțiile pe titularizare dezbaterile pe legea învățământului	discuțiile despre titularizare/privind titularizarea dezbaterile privind legea învățământului	sintaxă	Sintaxă: folosirea inadecvată a prepoziției pe.
+            proprietar mașină	proprietar al mașinii / proprietarul mașinii	sintaxă	Sintaxă: Nemarcarea relației sintactice.	
+        stats:
+            inital: 3386
+            INFO:root:duplicates wrong: 32
+            INFO:root:duplicates pairs (eliminated): 213
+            INFO:root:same wrong/correct: 53
+            INFO:root:stats per type: {'sintaxă': 1023, 'ortografie': 1149, 'punctuație': 122, 'semantică': 104, 'lexic': 116, 'stilistică': 18, 'other': 107}
+            INFO:root:average nr tokens wrong samples 10.052631578947368
+            INFO:root:average nr tokens correct samples 9.777777777777779
+    sent:
+        del:
+            Cine e Badea...s-a inflamat orezul, grișul în el?	[reformulare] Cine se crede Badea?	stilistică	Stilistică: exprimare nereverențioasă în citarea unor posibili comentatori la adresa prezentatorului.
+            Când apare un analist la televizor, toată lumea pune botu’	Când apare un analist la televizor, toată lumea îl crede	stilistică	Stilistică
+            autocarul a părăsit șoseaua și s-a prăbușit într-o regiune stâncoasă	sugestie: într-o regiune stâncoasă, autocarul a părăsit șoseaua și s-a prăbușit în gol [după cum se vede în imagini]	lexic	lexic (regiune = întindere mare de pământ mai mult sau mai puțin omogenă, dintr-o țară sau de pe glob, care prezintă caractere comune; ținut, zonă.“, DEX)
+            mascota emisiunii noastre ... [celălalt prezentator:] să- l ducem la ...	mascota emisiunii noastre ... [celălalt prezentator:] s-o ducem la ...	sintaxă	sintaxă: Dezacord.
+            Patru cadavre au fost descoperite la locul cadavrei	Patru cadavre au fost descoperite la locul exploziei	other	Rostire accidentală, necorectată
+            Ceea ce însă a lipsit de 1 Mai 2010 în Vama Veche	Ceea ce va lipsi însă de 1 Mai 2010 în Vama Veche	semantică	Semantică: Transmisiunea se face la data de 30 aprilie, care precedă data de 1 Mai. De aceea, folosirea timpului trecut nu este justificată.
+            Cumpărătorii au fost încântați mai ales datorită faptului că au economisit până la 200 de lei dacă alegeau să cumpere din librării.	Cumpărătorii au fost încântați mai ales că au economisit până la 200 de lei, fapt care nu s-ar fi întâmplat dacă ar fi ales să cumpere din librării.	sintaxă	Sintaxă, semantică: Construcție defectuoasă a enunțului.
+            Hai mă, ... Îi place mă,...	Hai, mă, ... Îi place, mă,...	punctuație	Punctuație: Absența virgulei care separă interjecția de restul enunțului.
+            Vă reamintesc, la ora 19 și 30 de minute, declarație președintele Traian Băsescu	Vă reamintesc, la ora 19 și 30 de minute, vom transmite declarația președintelui Traian Băsescu	sintaxă	Sintaxă: Nemarcarea realațiilor sintactice dintre cuvinte.
+            Leonard Cohen... va prezenta primul său	Leonard Cohen... va face primul său	semantică	Semantică: verbul a prezenta este nepotrivit contextual (alunecare
+            și, mai ales, vor avea parte și de a se bucura de un concert de muzică în cinstea lor, pentru că azi este ziua lor	și, mai ales, vor avea parte de un concert în cinstea lor	semantică	Semantică: Enunț redundant din punct de vedere semantic.
+            ...de comportamentul riscant al domnului Strauss-Kahn (par le comportement scabreux de Monsieur Strauss-Kahn)	...de comportamentul imoral/ reprobabil/ indecent al domnului Strauss-Kahn	semantică	Semantică: Traducere inexactă a unei declarații.
+            Prognoză România, la noapte Prognoză București	Prognoză pentru România, la noapte Prognoză pentru București	sintaxă	Sintaxă: Nemarcarea relațiilor sintactice.
+            N-a excelat în a promite foarte mult	Nu s-a hazardat să promită foarte mult	semantică	Semantică: Folosire improprie a verbului a excela.
+            O gara plină de indivizi suspecți; așa-i în gară, întotdeauna. În gară e un loc suspect (?Ramon Cotizo)	O gara plină de indivizi suspecți; așa-i în gară întotdeauna. Gara e un loc suspect
+            Care-i maximu’ de ani care ai K l-ai sta în închisoare?	nu știu, de foame, după fete
+            Om vedea de unde o să luați banii	Nu se știe de unde o să luați banii
+        stats:
+            initial: 5500
+            INFO:root:duplicates wrong: 62
+            INFO:root:duplicates pairs (eliminated): 71
+            INFO:root:same wrong/correct: 145
+            INFO:root:stats per type: {'sintaxă': 1860, 'ortografie': 1098, 'punctuație': 467, 'semantică': 399, 'lexic': 217, 'stilistică': 53, 'other': 381}  
+            INFO:root:average nr tokens wrong samples 19.81578947368421
+            INFO:root:average nr tokens correct samples 20.62162162162162
 
 
-
+ERRANT:
+    run errant:
+        python3 parallel_to_m2.py -orig ../corpora/errant_sent_original.txt  -cor ../corpora/errant_sent_corrected.txt -out ../corpora/out.txt
