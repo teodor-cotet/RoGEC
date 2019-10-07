@@ -11,3 +11,5 @@ wordlists/*
 test_tf.py
 test_keras.py
 log.log
+corpora/*
+ref/*
