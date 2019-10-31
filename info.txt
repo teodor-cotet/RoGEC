@@ -73,6 +73,9 @@ papers:
                      noising function. The resulting parallel corpora are subsequently used to pre-train Transformer models.
                     Then, by sequentially applying transfer
                     learning, we adapt these models to the domain and style of the test set
+    general papers:
+        Xie et al. (2016): character lvl encoder + attetion hierarchy (encoder - half each layer) 
+                + language model
 
     
 how to annotate:
@@ -106,6 +109,18 @@ stats CNA:
             INFO:root:stats per type: {'sintaxă': 1023, 'ortografie': 1149, 'punctuație': 122, 'semantică': 104, 'lexic': 116, 'stilistică': 18, 'other': 107}
             INFO:root:average nr tokens wrong samples 10.052631578947368
             INFO:root:average nr tokens correct samples 9.777777777777779
+        errant stats:
+            nr_edits_per_sent: 1.416066691928761
+            length_edits_per_sentence: 1.6726032588101554
+            nr_edits_per_category: {'M:ADP': 319, 'R:NOUN:FORM': 406, 'M:DET': 150, 
+                'R:SPELL': 780, 'M:PRON': 166, 'R:ORTH': 130, 'U:OTHER': 67, 'U:ADP': 24, 'M:PUNCT': 154,
+                'R:OTHER': 649, 'U:ADJ': 14, 'R:ADJ:FORM': 43, 'M:OTHER': 58, 'R:ADP': 66, 'R:MORPH': 184,
+                'R:NOUN': 128, 'U:PRON': 20, 'R:ADJ': 17, 'R:VERB:FORM': 11, 'R:DET': 102, 'U:PUNCT': 38,
+                'M:NOUN': 34, 'U:DET': 24, 'U:CCONJ': 30, 'R:DET:FORM': 30, 'U:ADV': 8, 'U:NOUN': 13,
+                'R:PUNCT': 23, 'M:CCONJ': 1, 'M:ADV': 2, 'R:CCONJ': 2, 'R:WO': 6, 'R:ADV': 11, 
+                'R:PRON:FORM': 11, 'R:PRON': 1, 'M:VERB': 2, 'M:ADJ': 5, 'R:VERB': 7, 'U:VERB': 1}
+            length_edits: 1.1811613593791812
+
     sent:
         del:
             Cine e Badea...s-a inflamat orezul, grișul în el?	[reformulare] Cine se crede Badea?	stilistică	Stilistică: exprimare nereverențioasă în citarea unor posibili comentatori la adresa prezentatorului.
@@ -133,14 +148,49 @@ stats CNA:
             INFO:root:stats per type: {'sintaxă': 1860, 'ortografie': 1098, 'punctuație': 467, 'semantică': 399, 'lexic': 217, 'stilistică': 53, 'other': 381}  
             INFO:root:average nr tokens wrong samples 19.81578947368421
             INFO:root:average nr tokens correct samples 20.62162162162162
+        errant stats:
+            nr_edits_per_sent: 1.364022346368715
+            length_edits_per_sentence: 1.6989944134078212
+            nr_edits_per_category: {'M:PUNCT': 539, 'M:ADP': 414, 'R:NOUN:FORM': 215, 
+                    'R:OTHER': 984, 'U:CCONJ': 107, 'R:ORTH': 123, 'M:OTHER': 173, 'R:MORPH': 172, 
+                    'U:PUNCT': 154, 'U:ADV': 119, 'U:ADJ': 26, 'R:WO': 90, 'U:OTHER': 282, 'R:VERB': 315,
+                    'R:SPELL': 799, 'U:PRON': 47, 'R:ADJ': 24, 'U:ADP': 134, 'R:NOUN': 177, 'R:ADP': 229,
+                    'M:VERB': 27, 'R:VERB:FORM': 375, 'R:ADV': 47, 'M:ADV': 37, 'U:VERB': 23, 'R:PUNCT': 54,
+                    'M:PRON': 74, 'M:NOUN': 26, 'U:NOUN': 29, 'R:PRON': 7, 'R:DET': 83, 'R:ADJ:FORM': 45, 'R:PRON:FORM': 42,
+                    'M:ADJ': 4, 'R:DET:FORM': 23, 'U:DET': 34, 'R:CCONJ': 17, 'M:CCONJ': 3, 'M:DET': 31}
+            length_edits: 1.2455766710353866
+    
+    all:
+        errant stats:
+            nr_edits_per_sent: 1.383328647736857
+            length_edits_per_sentence: 1.689204385718302
+            nr_edits_per_category: {'M:ADP': 733, 'R:NOUN:FORM': 621, 'M:DET': 181, 'R:SPELL': 1579, 'M:PRON': 240, 
+                'R:ORTH': 253, 'U:OTHER': 349, 'U:ADP': 158, 'M:PUNCT': 693, 'R:OTHER': 1633, 'U:ADJ': 40, 'R:ADJ:FORM': 88, 
+                'M:OTHER': 231, 'R:ADP': 295, 'R:MORPH': 356, 'R:NOUN': 305, 'U:PRON': 67, 'R:ADJ': 41, 
+                'R:VERB:FORM': 386, 'R:DET': 185, 'U:PUNCT': 192, 'M:NOUN': 60, 'U:DET': 58, 'U:CCONJ': 137, 
+                'R:DET:FORM': 53, 'U:ADV': 127, 'U:NOUN': 42, 'R:PUNCT': 77, 'M:CCONJ': 4, 'M:ADV': 39, 'R:CCONJ': 19, 
+                'R:WO': 96, 'R:ADV': 58, 'R:PRON:FORM': 53, 'R:PRON': 8, 'M:VERB': 29, 'M:ADJ': 9, 'R:VERB': 322, 'U:VERB': 24}
+            length_edits: 1.2211157402702977
 
+wikipedia:
+    5k:
+        nr_edits_per_sent: 1.9442
+        length_edits_per_sentence: 2.3712
+        nr_edits_per_category: {'R:SPELL': 3412, 'M:OTHER': 379, 'M:PRON': 501, 'R:OTHER': 1381, 'R:ADJ': 57, 'R:DET': 28, 'U:NOUN': 56, 'M:DET': 40, 'R:ADP': 151, 'M:NOUN': 61, 'U:OTHER': 228, 'R:ORTH': 228, 'U:PUNCT': 154, 'R:NOUN': 455, 'R:CCONJ': 856, 'R:MORPH': 95, 'M:PUNCT': 289, 'U:ADJ': 23, 'U:DET': 33, 'R:VERB:FORM': 59, 'R:PUNCT': 79, 'U:PRON': 251, 'M:ADJ': 43, 'R:WO': 23, 'M:ADP': 41, 'U:ADP': 32, 'R:VERB': 73, 'R:ADV': 15, 'R:NOUN:FORM': 110, 'M:ADV': 51, 'U:CCONJ': 18, 'M:VERB': 17, 'U:VERB': 18, 'M:CCONJ': 22, 'R:PRON': 379, 'R:ADJ:FORM': 28, 'U:ADV': 25, 'R:DET:FORM': 5, 'R:PRON:FORM': 5}
+        length_edits: 1.2196276103281556
 
-ERRANT:
+ERRANT adapted for ro:
     modified for romanian:
         for edits:
             -in process_edits (align_text.py) no possesive merge 
             -spacy for ro with pos and lemmas
+            -dict for hunspell from: https://cgit.freedesktop.org/libreoffice/dictionaries/tree/ro/ro_RO.dic
+            -ro stemmer from nltk: http://www.nltk.org/_modules/nltk/stem/snowball.html
+            -no tag_map (use spacy pos)
+            -eliminated any tags (only one plase)
+            -eliminated CONTR category (compared to german)
         for categories:
 
     run errant:
-        python3 parallel_to_m2.py -orig ../corpora/errant_sent_original.txt  -cor ../corpora/errant_sent_corrected.txt -out ../corpora/out.txt
+        python3 parallel_to_m2.py -lang ro -orig ../corpora/errant_sent_original.txt  -cor ../corpora/errant_sent_corrected.txt -out ../corpora/out.txt
+    
