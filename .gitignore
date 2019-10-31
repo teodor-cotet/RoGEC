@@ -13,3 +13,8 @@ test_keras.py
 log.log
 corpora/*
 ref/*
+*.xml
+t2t/**
+!t2t/run_transformer_tiny.sh
+!t2t/gec_ro/__init__.py
+!t2t/gec_ro/gec_ro.py
