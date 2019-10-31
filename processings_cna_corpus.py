@@ -109,8 +109,7 @@ class CNACorpus():
     
     def compute_stats_corpus(self, path_to_file: str):
         global args
-        vector_model = VECTOR_MODELS[Lang.RO][CorporaEnum.README][VectorModelType.WORD2VEC](
-                    name=CorporaEnum.README.value, lang=Lang.RO)
+       
         logging.info(f'file: {path_to_file}')
         cna_csv = csv.reader(open(path_to_file, 'rt', encoding='utf-8'))
         tokens_wrong, tokens_correct = [], [] 
@@ -119,8 +118,8 @@ class CNACorpus():
         for i, row in enumerate(cna_csv):
             row[0] = row[0].strip()
             row[1] = row[1].strip()
-            doc1 = Document(lang=Lang.RO, text=row[0], vector_model=vector_model)
-            doc2 = Document(lang=Lang.RO, text=row[1], vector_model=vector_model)
+            doc1 = Document(lang=Lang.RO, text=row[0])
+            doc2 = Document(lang=Lang.RO, text=row[1])
             nr_ww, nr_wc = len(doc1.get_words()), len(doc2.get_words())
             for t1 in doc1.get_words():
                 tokens_correct.append(t1.text)
@@ -195,17 +194,15 @@ class CNACorpus():
     def prepare_for_errant_format(self, path_csv_file: str, 
             path_to_origin_file: str, path_to_correct_file: str):  
         global args
-        vector_model = VECTOR_MODELS[Lang.RO][CorporaEnum.README][VectorModelType.WORD2VEC](
-                    name=CorporaEnum.README.value, lang=Lang.RO)
         logging.info(f'file: {path_csv_file}')
         cna_csv = csv.reader(open(path_csv_file, 'rt', encoding='utf-8'))
         with open(path_to_origin_file, 'wt') as origin, open(path_to_correct_file, 'wt') as corrected:
             for i, row in enumerate(cna_csv):
-                doc = Document(lang=Lang.RO, text=row[0], vector_model=vector_model)
+                doc = Document(lang=Lang.RO, text=row[0])
                 tokens = [token.text for token in doc.get_words()]
                 origin.write(" ".join(tokens) + "\n")
 
-                doc = Document(lang=Lang.RO, text=row[1], vector_model=vector_model)
+                doc = Document(lang=Lang.RO, text=row[1])
                 tokens = [token.text for token in doc.get_words()]
                 corrected.write(" ".join(tokens) + "\n")
         
@@ -251,6 +248,6 @@ if __name__ == "__main__":
         cna_corpus.compute_stats_corpus(path_to_file=args.path_to_new_cna_sent_csv)
         cna_corpus.compute_stats_corpus(path_to_file=args.path_to_new_cna_phrase_csv)
     elif args.errant:
-        cna_corpus.prepare_for_errant_format(path_csv_file=args.path_to_new_cna_sent_csv,
-                                             path_to_origin_file=args.path_errant_sent_original,
-                                             path_to_correct_file=args.path_errant_sent_corrected)
+        cna_corpus.prepare_for_errant_format(path_csv_file=args.path_to_new_cna_phrase_csv,
+                                             path_to_origin_file=args.path_errant_phrase_original,
+                                             path_to_correct_file=args.path_errant_phrase_corrected)
