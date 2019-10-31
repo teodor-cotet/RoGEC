@@ -17,6 +17,7 @@ ref/*
 
 t2t/**
 !t2t/run_transformer_tiny.sh
+!t2t/run_decoder.sh
 !t2t/gec_ro
 t2t/gec_ro/*
 !t2t/gec_ro/__init__.py
