@@ -190,7 +190,18 @@ ERRANT adapted for ro:
             -eliminated any tags (only one plase)
             -eliminated CONTR category (compared to german)
         for categories:
+    t2t:
+        -by default it uses an invertible wordpiece vocabular,  
+            check tensor2tensor/data_generators/text_problems.py  if you want to change it
+            https://tensorflow.github.io/tensor2tensor/new_problem.html
+            https://github.com/google/sentencepiece
+
+        -learnd embeddings, read here if you want:
 
     run errant:
         python3 parallel_to_m2.py -lang ro -orig ../corpora/errant_sent_original.txt  -cor ../corpora/errant_sent_corrected.txt -out ../corpora/out.txt
-    
+    run t2t:
+        cd t2t
+        source ./bin/active
+        ./transformer_tiny.sh
+

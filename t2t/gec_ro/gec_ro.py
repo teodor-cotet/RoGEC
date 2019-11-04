@@ -10,7 +10,7 @@ class GecRo(text_problems.Text2TextProblem):
 
   @property
   def approx_vocab_size(self):
-    return 2**13  # ~8k
+    return 2**14  # ~16k
 
   @property
   def is_generate_per_split(self):
@@ -37,9 +37,10 @@ class GecRo(text_problems.Text2TextProblem):
 
     for ff in files:
       print(ff)
-      with open(os.path.join(data_dir, ff), 'r', encoding='utf-8',  errors='ignore') as f:
+      with open(os.path.join(data_dir, ff), 'r', encoding='utf-8',  errors='replace') as f:
         for i, line in enumerate(f):
-          line = re.sub("[^a-z]+", " ", line.strip().lower())
+          #line = re.sub("[^a-z]+", " ", line.strip().lower())
+          # print(line)
           if i % 3 == 0:
             source = line.strip()
           elif i % 3 == 1:

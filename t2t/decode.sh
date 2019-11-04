@@ -7,7 +7,7 @@ MODEL=transformer
 HPARAMS=transformer_tiny
 TRAIN_DIR=$PWD/gec_ro/train/$MODEL-$HPARAMS
 mkdir -p $TRAIN_DIR $TMP_DIR $DATA_DIR
-DECODE_FILE=$DATA_DIR/decode_this_sample.txt
+DECODE_FILE=$USR_DIR/decode_this_sample.txt
 RESULTS_DECODE_FILE=test_corrected_wiki.txt
 touch $RESULTS_DECODE_FILE
 
