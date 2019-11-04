@@ -23,6 +23,9 @@ t2t/**
 t2t/gec_ro/*
 !t2t/gec_ro/__init__.py
 !t2t/gec_ro/gec_ro.py
+!t2t/gec_ro/data
+t2t/gec_ro/data/*
+!t2t/gec_ro/data/decode_this_sample.txt
 
 models/**
 test.py
