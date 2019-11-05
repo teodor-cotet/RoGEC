@@ -23,10 +23,10 @@ class GecRo(text_problems.Text2TextProblem):
     # 10% evaluation data
     return [{
         "split": problem.DatasetSplit.TRAIN,
-        "shards": 9,
+        "shards": 70,
     }, {
         "split": problem.DatasetSplit.EVAL,
-        "shards": 1,
+        "shards": 7,
     }]
 
   def generate_samples(self, data_dir, tmp_dir, dataset_split):
