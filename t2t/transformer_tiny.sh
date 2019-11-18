@@ -5,7 +5,7 @@ TMP_DIR=$PWD/gec_ro/tmp/
 MODEL=transformer
 #HPARAMS=transformer_base_single_gpu
 HPARAMS=transformer_tiny
-TRAIN_DIR=$PWD/gec_ro/train/$MODEL-$HPARAMS
+TRAIN_DIR=$PWD/gec_ro/train/transformer_tiny_all_wiki
 mkdir -p $TRAIN_DIR $TMP_DIR $DATA_DIR
 
 
@@ -15,4 +15,7 @@ t2t-trainer \
   --problem=$PROBLEM \
   --model=$MODEL \
   --hparams_set=$HPARAMS \
-  --output_dir=$TRAIN_DIR
+  --output_dir=$TRAIN_DIR \
+  --hparams='batch_size=256' \
+  --train_steps=400000 \
+  --eval_steps=40000
