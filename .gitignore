@@ -12,6 +12,9 @@ test_tf.py
 test_keras.py
 log.log
 corpora/*
+docs/*
+old_corrections/typos.csv
+old_corrections/mistakes_types.xlsx
 ref/*
 *.xml
 
@@ -23,9 +26,8 @@ t2t/**
 t2t/gec_ro/*
 !t2t/gec_ro/__init__.py
 !t2t/gec_ro/gec_ro.py
-!t2t/gec_ro/data
-t2t/gec_ro/data/*
-!t2t/gec_ro/data/decode_this_sample.txt
+!t2t/gec_ro/decode_this_sample.txt
+!t2t/set_up_colab.sh
 
 models/**
 test.py

@@ -88,7 +88,10 @@ how to annotate:
 
 
 stats CNA:
-
+    
+    added WMT:
+        en-ro wmt 700 senences added 
+        
     phrases:
         del:
             multor șlagăre	popular/cântecelor populare și al șlagărelor	sintaxă	Sintaxă: Dezacord al articolului genitival.
