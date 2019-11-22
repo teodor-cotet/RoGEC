@@ -120,7 +120,7 @@ def example_aspell():
 if __name__ == "__main__":
     # Define and parse program input
     parser = argparse.ArgumentParser(description="Generate synthetic data based on spellchecking")
-    parser.add_argument("-dir_path", default='/media/teo/drive hdd/gec/readme/rowiki-ro/txt', help="Path to txt files", type=str)
+    parser.add_argument("-dir_path", default='corpora/', help="Path to txt files", type=str)
     parser.add_argument("-stats", action='store_true', help="To compute statistics")
     parser.add_argument("-wiki", action='store_true', help="Generate from wiki")
 
