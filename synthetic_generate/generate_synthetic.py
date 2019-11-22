@@ -91,27 +91,27 @@ def generate_sentences():
     txt_files = get_txt_files(args.dir_path)
     gen_sents = set()
     for ffile in txt_files:
-        #try:
             with open(ffile, 'rt', encoding='utf-8', errors='replace') as f:
                 for content in f:
-                    diac_ratio, ratio_normal = compute_statistics_text(content)
-                    if diac_ratio < 0.01:
-                        continue
-                    if ratio_normal > 0.025:
-                        continue
-                    sentences = sent_tokenize(content)
-                    sentences = [sent.strip() for sent in sentences]
-                    filtered_sents = [sent for sent in sentences if filter_sentence(sent)]
+                    try:
+                        diac_ratio, ratio_normal = compute_statistics_text(content)
+                        if diac_ratio < 0.01:
+                            continue
+                        if ratio_normal > 0.025:
+                            continue
+                        sentences = sent_tokenize(content)
+                        sentences = [sent.strip() for sent in sentences]
+                        filtered_sents = [sent for sent in sentences if filter_sentence(sent)]
 
-                    for s in filtered_sents:
-                        if s not in gen_sents:
-                            gen_sents.add(s)
-                            print(s, file=log)
-                    
-                    if len(gen_sents) > 5e5:
-                        gen_sents = set()
-        # except:
-        #     print('error')
+                        for s in filtered_sents:
+                            if s not in gen_sents:
+                                gen_sents.add(s)
+                                print(s, file=log)
+                        
+                        if len(gen_sents) > 5e5:
+                            gen_sents = set()
+                    except:
+                        print('error')
 
 def example_aspell():
     s = aspell.Speller('lang', 'ro')
@@ -120,7 +120,7 @@ def example_aspell():
 if __name__ == "__main__":
     # Define and parse program input
     parser = argparse.ArgumentParser(description="Generate synthetic data based on spellchecking")
-    parser.add_argument("-dir_path", default='corpora/', help="Path to txt files", type=str)
+    parser.add_argument("-dir_path", default='/opt/teo/gec/corpora/', help="Path to txt files", type=str)
     parser.add_argument("-stats", action='store_true', help="To compute statistics")
     parser.add_argument("-wiki", action='store_true', help="Generate from wiki")
 
