@@ -2,7 +2,6 @@ import os
 import sys
 import string
 import argparse
-import aspell
 from collections import Counter
 from statistics import mean, stdev
 from nltk.tokenize import sent_tokenize
@@ -113,18 +112,13 @@ def generate_sentences():
                     except:
                         print('error')
 
-def example_aspell():
-    s = aspell.Speller('lang', 'ro')
-    print(s.suggest('copiii'))
 
 if __name__ == "__main__":
     # Define and parse program input
-    parser = argparse.ArgumentParser(description="Generate synthetic data based on spellchecking")
+    parser = argparse.ArgumentParser(description="Filter sentences from wikipedia")
     parser.add_argument("-dir_path", default='/opt/teo/gec/corpora/', help="Path to txt files", type=str)
     parser.add_argument("-stats", action='store_true', help="To compute statistics")
-    parser.add_argument("-wiki", action='store_true', help="Generate from wiki")
 
-    args = parser.parse_args()
     construct_globals()
     if args.stats:
         compute_statistics()
