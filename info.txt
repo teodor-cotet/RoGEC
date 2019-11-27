@@ -208,3 +208,8 @@ ERRANT adapted for ro:
         source ./bin/active
         ./transformer_tiny.sh
 
+    aspell:
+        sudo apt-get install libaspell-dev
+        sudo apt-get install aspell-ro
+        pip3 install aspell-python-py3
+
