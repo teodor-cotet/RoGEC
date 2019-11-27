@@ -49,6 +49,19 @@ def reconstruct_sentence(sent: List[str]) -> str:
 
     return text
 
+def repair_punct(text: str) -> str:
+    text = re.sub(r'(")\s+(.*?)\s+(")', quote_repl, text)
+    text = re.sub(r'(«)\s+(.*?)\s+(»)', quote_repl, text)
+    text = re.sub(r'(“)\s+(.*?)\s+(”)', quote_repl, text)
+    text = re.sub(r'(„)\s+(.*?)\s+(”)', quote_repl, text)
+    text = re.sub(r'\s*,\s*', ', ', text)
+    text = re.sub(r'(\D)\s*\.\s*$', point_repl, text)
+    text = re.sub(r'\s*\?\s*$', '? ', text)
+    text = re.sub(r'\s*\-\s*', '-', text)
+    text = re.sub(r'\s*\!\s*$', '! ', text)
+
+    return text
+
 def modify_words(tokenst: List[str]) -> List[str]:
     global args, speller, word_set, MATCH_ALPHA_WORD
 
@@ -151,14 +164,15 @@ def generate_sentences():
                 sent_modified = modify_sentence(sent)
             except:
                 continue
+            sent = repair_punct(sent)
             fout.write(sent + '\n')
             fout.write(sent_modified + "\n")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Filter sentences from wikipedia")
-    parser.add_argument("-sent_file_in", default='/home/teo/projects/gec/corpora/clean_sentences/30mil_wiki_clean.txt',
+    parser.add_argument("-sent_file_in", default='/home/teo/projects/gec/corpora/synthetic_wiki/30mil_wiki_clean.txt',
                      help="Path to txt file", type=str)
-    parser.add_argument("-sent_file_out", default='/home/teo/projects/gec/corpora/clean_sentences/30mil_wiki_dirty.txt',
+    parser.add_argument("-sent_file_out", default='/home/teo/projects/gec/corpora/synthetic_wiki/30mil_wiki_dirty.txt',
                      help="Path to out txt file", type=str)
     parser.add_argument("-perr_m", default=0.15, help="Mean of normal distribution for p err", type=float)
     parser.add_argument("-perr_stdev", default=0.2, help="St dev of normal distribution for p err", type=float)

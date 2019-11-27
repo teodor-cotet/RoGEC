@@ -103,6 +103,7 @@ def generate_sentences():
                         filtered_sents = [sent for sent in sentences if filter_sentence(sent)]
 
                         for s in filtered_sents:
+                            s = repair_punct(s)
                             if s not in gen_sents:
                                 gen_sents.add(s)
                                 print(s, file=log)
