@@ -28,6 +28,8 @@ eval_step_signature = [
         tf.TensorSpec(shape=(None, None), dtype=tf.int64),
     ]
 
+results = open('results.txt', 'w')
+
 "Add a start and end token to the input and target."
 def encode(lang1, lang2):
     global tokenizer_pt, tokenizer_en
@@ -552,13 +554,13 @@ def main():
         for (batch, (inp, tar)) in enumerate(train_dataset):
             train_step(inp, tar)
             
-            if batch % 50 == 0:
+            if batch % 5000 == 0:
                 print ('Epoch {} Batch {} Loss {:.4f} Accuracy {:.4f}'.format(
-                    epoch + 1, batch, train_loss.result(), train_accuracy.result()))
+                    epoch + 1, batch, train_loss.result(), train_accuracy.result()), file=results)
         if (epoch + 1) % 5 == 0:
             ckpt_save_path = ckpt_manager.save()
             print ('Saving checkpoint for epoch {} at {}'.format(epoch + 1,
-                                                                ckpt_save_path))
+                                                                ckpt_save_path), file=results)
 
         print ('Epoch {} Loss {:.4f} Accuracy {:.4f}'.format(epoch + 1, 
                                                         train_loss.result(), 
@@ -617,7 +619,7 @@ def construct_subwords_gec(examples: List):
         merged_examples.append(target)
 
     tokenizer_ro = tfds.features.text.SubwordTextEncoder.build_from_corpus(
-            merged_examples, target_vocab_size=2**9)
+            merged_examples, target_vocab_size=args.dict_size)
     
     if not os.path.exists(args.subwords):
         os.makedirs(args.subwords)
@@ -804,7 +806,7 @@ def train_gec():
         # print(optimizer._decayed_lr(tf.float32))
 
     # train
-    for epoch in range(EPOCHS):
+    for epoch in range(args.epochs):
         start = time.time()
         train_loss.reset_states()
         train_accuracy.reset_states()
@@ -813,23 +815,32 @@ def train_gec():
 
         for (batch, (inp, tar)) in enumerate(train_dataset):
             train_step(inp, tar)
-            if batch % 100 == 0:
+            if batch % 5000 == 0:
+                print('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
+                    epoch + 1, batch, train_loss.result(), train_accuracy.result()), file=results)
                 print('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
                     epoch + 1, batch, train_loss.result(), train_accuracy.result()))
 
         if (epoch + 1) % 5 == 0:
             ckpt_save_path = ckpt_manager.save()
             print('Saving checkpoint for epoch {} at {}'.format(epoch+1,
-                                                                ckpt_save_path))
+                                                                ckpt_save_path), file=results)
+        print('Final train - epoch {} loss {:.4f} accuracy {:.4f}'.format(epoch + 1, 
+                                                        train_loss.result(), 
+                                                        train_accuracy.result()), file=results)
         print('Final train - epoch {} loss {:.4f} accuracy {:.4f}'.format(epoch + 1, 
                                                         train_loss.result(), 
                                                         train_accuracy.result()))
 
         for (batch, (inp, tar)) in enumerate(dev_dataset):
             eval_step(inp, tar)
-            if batch % 100 == 0:
+            if batch % 1000 == 0:
                 print('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
+                    epoch + 1, batch, eval_loss.result(), eval_accuracy.result()), file=results)
+                print('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
                     epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
+        print('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
+                    epoch + 1, batch, eval_loss.result(), eval_accuracy.result()), file=results)
         print('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
                     epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
 
@@ -838,8 +849,8 @@ if __name__ == "__main__":
     parser.add_argument('-dataset_file', dest='dataset_file', action="store",
                          default='corpora/synthetic_wiki/30k_clean_dirty_better.txt')
 
-    parser.add_argument('-checkpoint', dest='checkpoint', action="store", default='checkpoints/transformer_tiny')
-    parser.add_argument('-subwords', dest='subwords', action="store", default='checkpoints/transformer_tiny/corpora')
+    parser.add_argument('-checkpoint', dest='checkpoint', action="store", default='checkpoints/transformer_base')
+    parser.add_argument('-subwords', dest='subwords', action="store", default='checkpoints/transformer_base/corpora')
     
     parser.add_argument('-train_mode', dest='train_mode', action="store_true", default=False)
     parser.add_argument('-decode_mode', dest='decode_mode', action="store_true", default=False)
@@ -850,6 +861,8 @@ if __name__ == "__main__":
     parser.add_argument('-dff', dest='dff', action="store", type=int, default=512)
     parser.add_argument('-num_heads', dest='num_heads', action="store", type=int, default=8)
     parser.add_argument('-dropout', dest='dropout', action="store", type=float, default=0.1)
+    parser.add_argument('-dict_size', dest='dict_size', action="store", type=int, default=(2**15))
+    parser.add_argument('-epochs', dest='epochs', action="store", type=int, default=100)
 
     # test stuff
     parser.add_argument('-in_file_decode', dest='in_file_decode', action="store", default='corpora/synthetic_wiki/50_wiki_drity.txt')
