@@ -11,8 +11,8 @@ import argparse, os
 from typing import Tuple, List, Dict
 
 BUFFER_SIZE = 20000
-BATCH_SIZE = 16
-MAX_LENGTH = 40
+BATCH_SIZE = 512
+MAX_LENGTH = 500
 TRAIN_DEV_SPLIT = 0.9
 EPOCHS = 100
 tokenizer_pt, tokenizer_en, tokenizer_ro = None, None, None
@@ -857,8 +857,8 @@ if __name__ == "__main__":
 
     """model params"""
     parser.add_argument('-num_layers', dest='num_layers', action="store", type=int, default=6)
-    parser.add_argument('-d_model', dest='d_model', action="store", type=int, default=128)
-    parser.add_argument('-dff', dest='dff', action="store", type=int, default=512)
+    parser.add_argument('-d_model', dest='d_model', action="store", type=int, default=512)
+    parser.add_argument('-dff', dest='dff', action="store", type=int, default=2048)
     parser.add_argument('-num_heads', dest='num_heads', action="store", type=int, default=8)
     parser.add_argument('-dropout', dest='dropout', action="store", type=float, default=0.1)
     parser.add_argument('-dict_size', dest='dict_size', action="store", type=int, default=(2**15))
