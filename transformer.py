@@ -644,13 +644,13 @@ def construct_datasets_gec():
     train_dataset = train_dataset.filter(filter_max_length_gec)
     train_dataset = train_dataset.cache()
     train_dataset = train_dataset.shuffle(BUFFER_SIZE).padded_batch(
-        BATCH_SIZE, padded_shapes=([-1], [-1])) # pad with 0
+        BATCH_SIZE, padded_shapes=([args.seq_length], [-1])) # pad with 0
     train_dataset = train_dataset.prefetch(tf.data.experimental.AUTOTUNE) # how many batches to prefectch
 
     dev_dataset = dataset.skip(sample_train)
     dev_dataset = dev_dataset.filter(filter_max_length_gec)
     dev_dataset = dev_dataset.shuffle(BUFFER_SIZE).padded_batch(
-        BATCH_SIZE, padded_shapes=([-1], [-1]))
+        BATCH_SIZE, padded_shapes=([args.seq_length], [-1]))
     return train_dataset, dev_dataset
 
 def generate_sentence_gec(inp_sentence: str):
@@ -789,6 +789,10 @@ def train_gec():
 
     train_dataset, dev_dataset = construct_datasets_gec()
     
+    for x, y in train_dataset.take(5):
+        print(x)
+        print(x.shape)
+
     train_loss = tf.keras.metrics.Mean(name='train_loss')
     train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
     eval_loss = tf.keras.metrics.Mean(name='eval_loss')
@@ -863,6 +867,7 @@ if __name__ == "__main__":
     parser.add_argument('-dropout', dest='dropout', action="store", type=float, default=0.1)
     parser.add_argument('-dict_size', dest='dict_size', action="store", type=int, default=(2**15))
     parser.add_argument('-epochs', dest='epochs', action="store", type=int, default=100)
+    parser.add_argument('-seq_length', dest='seq_length', action="store", type=int, default=256)
 
     # test stuff
     parser.add_argument('-in_file_decode', dest='in_file_decode', action="store", default='corpora/synthetic_wiki/50_wiki_drity.txt')
