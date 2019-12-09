@@ -12,7 +12,7 @@ from typing import Tuple, List, Dict
 
 BUFFER_SIZE = 20000
 BATCH_SIZE = 128
-MAX_LENGTH = 250
+MAX_LENGTH = 124
 TRAIN_DEV_SPLIT = 0.9
 EPOCHS = 100
 tokenizer_pt, tokenizer_en, tokenizer_ro = None, None, None
@@ -28,7 +28,6 @@ eval_step_signature = [
         tf.TensorSpec(shape=(None, None), dtype=tf.int64),
     ]
 
-results = open('results.txt', 'w')
 
 "Add a start and end token to the input and target."
 def encode(lang1, lang2):
@@ -555,12 +554,12 @@ def main():
             train_step(inp, tar)
             
             if batch % 5000 == 0:
-                print ('Epoch {} Batch {} Loss {:.4f} Accuracy {:.4f}'.format(
-                    epoch + 1, batch, train_loss.result(), train_accuracy.result()), file=results)
+                log.write('Epoch {} Batch {} Loss {:.4f} Accuracy {:.4f} \n'.format(
+                    epoch + 1, batch, train_loss.result(), train_accuracy.result()))
         if (epoch + 1) % 5 == 0:
             ckpt_save_path = ckpt_manager.save()
             print ('Saving checkpoint for epoch {} at {}'.format(epoch + 1,
-                                                                ckpt_save_path), file=results)
+                                                                ckpt_save_path), file=log)
 
         print ('Epoch {} Loss {:.4f} Accuracy {:.4f}'.format(epoch + 1, 
                                                         train_loss.result(), 
@@ -603,8 +602,7 @@ def gen_tensors_gec():
 def get_examples_gec() -> List[str]:
     global args, tokenizer_ro
     gen = gec_generator()
-    examples = list(gen)
-    return examples
+    return gen
 
 def construct_subwords_gec(examples: List):
     global args
@@ -634,18 +632,19 @@ def construct_datasets_gec():
     if os.path.isfile(args.subwords):
         tokenizer_ro  = construct_subwords_gec(None)
     else:
-        tokenizer_ro  = construct_subwords_gec(examples)
+        tokenizer_ro  = construct_subwords_gec(list(examples))
 
-    sample_train = int(len(examples) * TRAIN_DEV_SPLIT)
+    sample_train = int(10e6 * TRAIN_DEV_SPLIT)
 
     dataset = tf.data.Dataset.from_generator(gen_tensors_gec, output_types=(tf.string, tf.string))
     dataset = dataset.map(tf_encode_gec)
     train_dataset = dataset.take(sample_train)
     train_dataset = train_dataset.filter(filter_max_length_gec)
-    train_dataset = train_dataset.cache()
+    # train_dataset = train_dataset.cache()
     train_dataset = train_dataset.shuffle(BUFFER_SIZE).padded_batch(
         BATCH_SIZE, padded_shapes=([args.seq_length], [-1])) # pad with 0
     train_dataset = train_dataset.prefetch(tf.data.experimental.AUTOTUNE) # how many batches to prefectch
+    # train_dataset = train_dataset.prefetch(1)
 
     dev_dataset = dataset.skip(sample_train)
     dev_dataset = dev_dataset.filter(filter_max_length_gec)
@@ -786,67 +785,77 @@ def get_model_gec():
 
 def train_gec():
     global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy
+    with open('run.txt', 'wt') as log:
+        
+        train_dataset, dev_dataset = construct_datasets_gec()
+        
+        for x, y in train_dataset.take(5):
+            print(x)
+            print(x.shape)
 
-    train_dataset, dev_dataset = construct_datasets_gec()
-    
-    for x, y in train_dataset.take(5):
-        print(x)
-        print(x.shape)
+        train_loss = tf.keras.metrics.Mean(name='train_loss')
+        train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
+        eval_loss = tf.keras.metrics.Mean(name='eval_loss')
+        eval_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='eval_accuracy')
 
-    train_loss = tf.keras.metrics.Mean(name='train_loss')
-    train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
-    eval_loss = tf.keras.metrics.Mean(name='eval_loss')
-    eval_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='eval_accuracy')
+        transformer, optimizer = get_model_gec()
+        # object you want to checkpoint are saved as attributes of the chepoint obj
+        ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
+        ckpt_manager = tf.train.CheckpointManager(ckpt, args.checkpoint, max_to_keep=5)
+        if ckpt_manager.latest_checkpoint:
+            # print(optimizer._decayed_lr(tf.float32))
+            # loading mechanis matches variables from the tf graph and resotres their values
+            ckpt.restore(ckpt_manager.latest_checkpoint)
+            print('Latest checkpoint restored!!')
+            # print(optimizer._decayed_lr(tf.float32))
 
-    transformer, optimizer = get_model_gec()
-    # object you want to checkpoint are saved as attributes of the chepoint obj
-    ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
-    ckpt_manager = tf.train.CheckpointManager(ckpt, args.checkpoint, max_to_keep=5)
-    if ckpt_manager.latest_checkpoint:
-        # print(optimizer._decayed_lr(tf.float32))
-        # loading mechanis matches variables from the tf graph and resotres their values
-        ckpt.restore(ckpt_manager.latest_checkpoint)
-        print('Latest checkpoint restored!!')
-        # print(optimizer._decayed_lr(tf.float32))
+        # train
+        for epoch in range(args.epochs):
+            start = time.time()
+            train_loss.reset_states()
+            train_accuracy.reset_states()
+            eval_loss.reset_states()
+            eval_accuracy.reset_states()
 
-    # train
-    for epoch in range(args.epochs):
-        start = time.time()
-        train_loss.reset_states()
-        train_accuracy.reset_states()
-        eval_loss.reset_states()
-        eval_accuracy.reset_states()
+            for (batch, (inp, tar)) in enumerate(train_dataset):
+                train_step(inp, tar)
+                if batch % 5000 == 0:
+                    print('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
+                        epoch + 1, batch, train_loss.result(), train_accuracy.result()))
+                    log.write('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
+                        epoch + 1, batch, train_loss.result(), train_accuracy.result()))
+                    log.flush()
 
-        for (batch, (inp, tar)) in enumerate(train_dataset):
-            train_step(inp, tar)
-            if batch % 5000 == 0:
-                print('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
-                    epoch + 1, batch, train_loss.result(), train_accuracy.result()), file=results)
-                print('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
-                    epoch + 1, batch, train_loss.result(), train_accuracy.result()))
 
-        if (epoch + 1) % 5 == 0:
-            ckpt_save_path = ckpt_manager.save()
-            print('Saving checkpoint for epoch {} at {}'.format(epoch+1,
-                                                                ckpt_save_path), file=results)
-        print('Final train - epoch {} loss {:.4f} accuracy {:.4f}'.format(epoch + 1, 
-                                                        train_loss.result(), 
-                                                        train_accuracy.result()), file=results)
-        print('Final train - epoch {} loss {:.4f} accuracy {:.4f}'.format(epoch + 1, 
-                                                        train_loss.result(), 
-                                                        train_accuracy.result()))
+            if (epoch + 1) % 5 == 0:
+                ckpt_save_path = ckpt_manager.save()
+                log.write('Saving checkpoint for epoch {} at {} \n'.format(epoch+1,
+                                                                    ckpt_save_path))
+                log.flush()
+            
+            print('Final train - epoch {} loss {:.4f} accuracy {:.4f}'.format(epoch + 1, 
+                                                            train_loss.result(), 
+                                                            train_accuracy.result()))
+            log.write('Final train - epoch {} loss {:.4f} accuracy {:.4f} \n'.format(epoch + 1, 
+                                                            train_loss.result(), 
+                                                            train_accuracy.result()))
+            log.flush()
 
-        for (batch, (inp, tar)) in enumerate(dev_dataset):
-            eval_step(inp, tar)
-            if batch % 1000 == 0:
-                print('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
-                    epoch + 1, batch, eval_loss.result(), eval_accuracy.result()), file=results)
-                print('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
-                    epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
-        print('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
-                    epoch + 1, batch, eval_loss.result(), eval_accuracy.result()), file=results)
-        print('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
-                    epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
+            for (batch, (inp, tar)) in enumerate(dev_dataset):
+                eval_step(inp, tar)
+                if batch % 1000 == 0:
+                    print('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
+                        epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
+                    log.write('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
+                        epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
+                    log.flush()
+                    
+            print('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
+                        epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
+            log.write('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
+                        epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
+            log.flush()
+            
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process some integers.')
@@ -861,13 +870,13 @@ if __name__ == "__main__":
 
     """model params"""
     parser.add_argument('-num_layers', dest='num_layers', action="store", type=int, default=6)
-    parser.add_argument('-d_model', dest='d_model', action="store", type=int, default=256)
-    parser.add_argument('-dff', dest='dff', action="store", type=int, default=512)
+    parser.add_argument('-d_model', dest='d_model', action="store", type=int, default=128)
+    parser.add_argument('-dff', dest='dff', action="store", type=int, default=256)
     parser.add_argument('-num_heads', dest='num_heads', action="store", type=int, default=8)
     parser.add_argument('-dropout', dest='dropout', action="store", type=float, default=0.1)
     parser.add_argument('-dict_size', dest='dict_size', action="store", type=int, default=(2**15))
     parser.add_argument('-epochs', dest='epochs', action="store", type=int, default=100)
-    parser.add_argument('-seq_length', dest='seq_length', action="store", type=int, default=256)
+    parser.add_argument('-seq_length', dest='seq_length', action="store", type=int, default=128)
 
     # test stuff
     parser.add_argument('-in_file_decode', dest='in_file_decode', action="store", default='corpora/synthetic_wiki/50_wiki_drity.txt')
