@@ -527,7 +527,7 @@ def main():
                           pe_input=input_vocab_size, 
                           pe_target=target_vocab_size,
                           rate=dropout_rate)
-    checkpoint_path = "./checkpoints/train"
+    checkpoint_path = args.checkpoint
     ckpt = tf.train.Checkpoint(transformer=transformer,
                             optimizer=optimizer)
     ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
@@ -629,8 +629,9 @@ def construct_subwords_gec(examples: List):
 def construct_datasets_gec():
     global args, tokenizer_ro, TRAIN_DEV_SPLIT
     examples = get_examples_gec()
-    if os.path.isfile(args.subwords):
+    if os.path.isfile(args.subwords + '.subwords'):
         tokenizer_ro  = construct_subwords_gec(None)
+        print('subwords restored')
     else:
         tokenizer_ro  = construct_subwords_gec(list(examples))
 
@@ -656,7 +657,8 @@ def generate_sentence_gec(inp_sentence: str):
     global tokenizer_ro, transformer, optimizer, args, MAX_LENGTH
 
     if tokenizer_ro is None:
-        if os.path.isfile(args.subwords):
+        if os.path.isfile(args.subwords + '.subwords'):
+            print('Vocabulary loaded\n')
             tokenizer_ro  = construct_subwords_gec(None)
         else:
             examples = get_examples_gec()
@@ -749,8 +751,9 @@ def plot_attention_weights_gec(attention, sentence, result, layer):
 def correct_from_file(in_file: str, out_file: str):
     with open(in_file, 'r') as fin, open(out_file, 'w') as fout:
         for line in fin:
+            print(line)
             predicted_sentences = correct_gec(line)
-            fout.write(line)
+            #fout.write(line)
             fout.write(predicted_sentences + '\n')
             fout.flush()
 
@@ -862,8 +865,8 @@ if __name__ == "__main__":
     parser.add_argument('-dataset_file', dest='dataset_file', action="store",
                          default='corpora/synthetic_wiki/30k_clean_dirty_better.txt')
 
-    parser.add_argument('-checkpoint', dest='checkpoint', action="store", default='checkpoints/transformer_base')
-    parser.add_argument('-subwords', dest='subwords', action="store", default='checkpoints/transformer_base/corpora')
+    parser.add_argument('-checkpoint', dest='checkpoint', action="store", default='checkpoints/transformer_small_2_mil')
+    parser.add_argument('-subwords', dest='subwords', action="store", default='checkpoints/transformer_small_2_mil/corpora')
     
     parser.add_argument('-train_mode', dest='train_mode', action="store_true", default=False)
     parser.add_argument('-decode_mode', dest='decode_mode', action="store_true", default=False)
@@ -879,8 +882,8 @@ if __name__ == "__main__":
     parser.add_argument('-seq_length', dest='seq_length', action="store", type=int, default=128)
 
     # test stuff
-    parser.add_argument('-in_file_decode', dest='in_file_decode', action="store", default='corpora/synthetic_wiki/50_wiki_drity.txt')
-    parser.add_argument('-out_file_decode', dest='out_file_decode', action="store", default='corpora/synthetic_wiki/50_predicted.txt')
+    parser.add_argument('-in_file_decode', dest='in_file_decode', action="store", default='corpora/cna/dev_in.txt')
+    parser.add_argument('-out_file_decode', dest='out_file_decode', action="store", default='corpora/cna/dev_predicted_2.txt')
     args = parser.parse_args()
 
     for k in args.__dict__:
