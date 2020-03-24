@@ -3,6 +3,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import tensorflow_datasets as tfds
 import tensorflow as tf
+from bert.tokenization.bert_tokenization import FullTokenizer
 
 import time
 import numpy as np
@@ -13,17 +14,19 @@ import bert
 from bert.tokenization.bert_tokenization import FullTokenizer
 
 BUFFER_SIZE = 20000
-BATCH_SIZE = 64
-MAX_LENGTH = 124
+BATCH_SIZE = 8
+MAX_LENGTH = 252
 TRAIN_DEV_SPLIT = 0.9
+TOTAL_SAMPLES = 10e6
 EPOCHS = 100
-tokenizer_pt, tokenizer_en, tokenizer_ro = None, None, None
+D_MODEL = 256
+tokenizer_pt, tokenizer_en, tokenizer_ro, tokenizer_bert = None, None, None, None
 args = None
 transformer, optimizer, train_loss, train_accuracy = None, None, None, None
 eval_loss, eval_accuracy = None, None
 train_step_signature = [
-        tf.TensorSpec(shape=(None, None), dtype=tf.int64),
-        tf.TensorSpec(shape=(None, None), dtype=tf.int64),
+        tf.TensorSpec(shape=(None, D_MODEL), dtype=tf.int64),
+        tf.TensorSpec(shape=(None, D_MODEL), dtype=tf.int64),
         tf.TensorSpec(shape=(None, None), dtype=tf.int64),
     ]
 eval_step_signature = [
@@ -457,10 +460,8 @@ class TransformerBert(tf.keras.Model):
         
     def call(self, input_ids, input_seg, tar, training, enc_padding_mask, 
             look_ahead_mask, dec_padding_mask):
-        print('bert input: ',input_ids.shape)
         enc_output = self.encoder(input_ids, input_seg, training)  # (batch_size, inp_seq_len, d_model)
         # dec_output.shape == (batch_size, tar_seq_len, d_model)
-        print('bert output: ', enc_output.shape)
         dec_output, attention_weights = self.decoder(
             tar, enc_output, training, look_ahead_mask, dec_padding_mask)
         
@@ -480,10 +481,8 @@ class Transformer(tf.keras.Model):
         
     def call(self, inp, tar, training, enc_padding_mask, 
             look_ahead_mask, dec_padding_mask):
-        print('standrd enc input: ', inp.shape)
         enc_output = self.encoder(inp, training, enc_padding_mask)  # (batch_size, inp_seq_len, d_model)
         # dec_output.shape == (batch_size, tar_seq_len, d_model)
-        print('standrd enc output: ', enc_output.shape)
 
         dec_output, attention_weights = self.decoder(
             tar, enc_output, training, look_ahead_mask, dec_padding_mask)
@@ -561,19 +560,15 @@ def train_step(inp, inp_seg, tar):
     tar_inp = tar[:, :-1]
     tar_real = tar[:, 1:]
 
-    temp_input = tf.random.uniform((64, 38), dtype=tf.int64, minval=0, maxval=200)
-    temp_seg = tf.ones((64, 38), dtype=tf.int64)
-    temp_target = tf.random.uniform((64, 36), dtype=tf.int64, minval=0, maxval=200)
-
-    if args.bert is True:
-        enc_padding_mask, combined_mask, dec_padding_mask = create_masks(temp_input, temp_target)
-    else:
-        enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
-
-
+    enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
+    #print(inp.shape, inp_seg.shape, tar.shape)
+    # temp_input = tf.random.uniform((64, 256), dtype=tf.int64, minval=0, maxval=200)
+    # temp_seg = tf.ones((64, 256), dtype=tf.int64)
+    # temp_target = tf.random.uniform((64, 254), dtype=tf.int64, minval=0, maxval=200)
+    
     with tf.GradientTape() as tape:
         if args.bert is True:
-            predictions, _ = transformer(temp_input, temp_seg, temp_target, 
+            predictions, _ = transformer(inp, inp_seg, tar_inp, 
                                     True, 
                                     enc_padding_mask, 
                                     combined_mask, 
@@ -608,9 +603,15 @@ def filter_max_length_gec(x, y, max_length=MAX_LENGTH):
                         tf.size(y) <= max_length)
 
 def encode_gec(source: str, target: str):
-    global tokenizer_ro
-    source = [tokenizer_ro.vocab_size] + tokenizer_ro.encode(source.numpy()) +\
-         [tokenizer_ro.vocab_size + 1]
+    global tokenizer_ro, tokenizer_bert
+    if args.bert:
+        tokens = ['[CLS]']
+        tokens.extend(tokenizer_bert.tokenize(source.numpy()))
+        tokens.append('[SEP]')
+        source = tokenizer_bert.convert_tokens_to_ids(tokens)
+    else:
+        source = [tokenizer_ro.vocab_size] + tokenizer_ro.encode(source.numpy()) +\
+            [tokenizer_ro.vocab_size + 1]
     target = [tokenizer_ro.vocab_size] + tokenizer_ro.encode(target.numpy()) +\
          [tokenizer_ro.vocab_size + 1]
     return source, target
@@ -630,8 +631,9 @@ def get_examples_gec() -> List[str]:
     return gen
 
 def construct_subwords_gec(examples: List):
-    global args
-
+    global args, tokenizer_bert, tokenizer_ro
+    if args.bert:
+        tokenizer_bert = FullTokenizer(vocab_file=args.bert_model_dir + "vocab.vocab")
     if examples is None:
         tokenizer_ro = tfds.features.text.SubwordTextEncoder.load_from_file(args.subwords)
         return tokenizer_ro
@@ -652,7 +654,7 @@ def construct_subwords_gec(examples: List):
     return tokenizer_ro
 
 def construct_datasets_gec():
-    global args, tokenizer_ro, TRAIN_DEV_SPLIT
+    global args, tokenizer_ro, TRAIN_DEV_SPLIT, TOTAL_SAMPLES
     examples = get_examples_gec()
     if os.path.isfile(args.subwords + '.subwords'):
         tokenizer_ro  = construct_subwords_gec(None)
@@ -660,7 +662,7 @@ def construct_datasets_gec():
     else:
         tokenizer_ro  = construct_subwords_gec(list(examples))
 
-    sample_train = int(10e6 * TRAIN_DEV_SPLIT)
+    sample_train = int(TOTAL_SAMPLES * TRAIN_DEV_SPLIT)
 
     dataset = tf.data.Dataset.from_generator(gen_tensors_gec, output_types=(tf.string, tf.string))
     dataset = dataset.map(tf_encode_gec)
@@ -817,7 +819,7 @@ def get_model_gec():
     return transformer, optimizer
 
 def train_gec():
-    global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy
+    global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy, BATCH_SIZE
     with open('run.txt', 'wt') as log:
         
         train_dataset, dev_dataset = construct_datasets_gec()
@@ -850,15 +852,15 @@ def train_gec():
             eval_loss.reset_states()
             eval_accuracy.reset_states()
 
-            for (batch, (inp, tar)) in enumerate(train_dataset):               
-                train_step(inp, inp, tar)
+            for (batch, (inp, tar)) in enumerate(train_dataset):
+                inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
+                train_step(inp, inp_seg, tar)
                 if batch % 5000 == 0:
                     print('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
                         epoch + 1, batch, train_loss.result(), train_accuracy.result()))
                     log.write('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
                         epoch + 1, batch, train_loss.result(), train_accuracy.result()))
                     log.flush()
-
 
             if (epoch + 1) % 5 == 0:
                 ckpt_save_path = ckpt_manager.save()
@@ -924,6 +926,7 @@ if __name__ == "__main__":
 
     parser.add_argument('-checkpoint', dest='checkpoint', action="store", default='checkpoints/transformer_test')
     parser.add_argument('-subwords', dest='subwords', action="store", default='checkpoints/transformer_test/corpora')
+    parser.add_argument('-bert_model_dir', dest='bert_model_dir', action="store", default='./bert/teo/ro0/')
     
     parser.add_argument('-bert', dest='bert', action="store_true", default=False)
     parser.add_argument('-train_mode', dest='train_mode', action="store_true", default=False)
@@ -931,13 +934,14 @@ if __name__ == "__main__":
 
     """model params"""
     parser.add_argument('-num_layers', dest='num_layers', action="store", type=int, default=6)
-    parser.add_argument('-d_model', dest='d_model', action="store", type=int, default=128)
+    # d_model size is the out of the embeddings, it must match the bert model size, if you use one
+    parser.add_argument('-d_model', dest='d_model', action="store", type=int, default=256)
     parser.add_argument('-dff', dest='dff', action="store", type=int, default=256)
     parser.add_argument('-num_heads', dest='num_heads', action="store", type=int, default=8)
     parser.add_argument('-dropout', dest='dropout', action="store", type=float, default=0.1)
     parser.add_argument('-dict_size', dest='dict_size', action="store", type=int, default=(2**15))
-    parser.add_argument('-epochs', dest='epochs', action="store", type=int, default=10)
-    parser.add_argument('-seq_length', dest='seq_length', action="store", type=int, default=128)
+    parser.add_argument('-epochs', dest='epochs', action="store", type=int, default=100)
+    parser.add_argument('-seq_length', dest='seq_length', action="store", type=int, default=256)
 
     # test stuff
     parser.add_argument('-in_file_decode', dest='in_file_decode', action="store", default='corpora/cna/dev_old/small_decode_test.txt')
