@@ -1,16 +1,17 @@
 
-from __future__ import absolute_import, division, print_function, unicode_literals
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
 
-import tensorflow_datasets as tfds
-import tensorflow as tf
-from bert.tokenization.bert_tokenization import FullTokenizer
-
+import argparse
+import os
 import time
-import numpy as np
-import matplotlib.pyplot as plt
-import argparse, os
-from typing import Tuple, List, Dict
+from typing import Dict, List, Tuple
+
 import bert
+import matplotlib.pyplot as plt
+import numpy as np
+import tensorflow as tf
+import tensorflow_datasets as tfds
 from bert.tokenization.bert_tokenization import FullTokenizer
 
 BUFFER_SIZE = 20000
@@ -805,7 +806,7 @@ def get_model_gec():
     if args.bert is True:
         transformer = TransformerBert(args.num_layers, args.d_model, args.num_heads, args.dff,
                             vocab_size, vocab_size,
-                            model_dir='./bert/teo/ro0/', 
+                            model_dir=args.bert_model_dir, 
                             pe_input=vocab_size, 
                             pe_target=vocab_size,
                             rate=args.dropout)
@@ -895,7 +896,7 @@ def test_bert_trans():
     if args.bert is True:
         sample_transformer = TransformerBert(num_layers=2, d_model=512, num_heads=8, dff=2048, 
             input_vocab_size=8500, target_vocab_size=8000, 
-            model_dir='./bert/teo/ro0/', pe_input=10000, pe_target=6000)
+            model_dir=args.bert_model_dir, pe_input=10000, pe_target=6000)
     else:
         sample_transformer = Transformer(
             num_layers=2, d_model=512, num_heads=8, dff=2048, 
@@ -926,7 +927,7 @@ if __name__ == "__main__":
 
     parser.add_argument('-checkpoint', dest='checkpoint', action="store", default='checkpoints/transformer_test')
     parser.add_argument('-subwords', dest='subwords', action="store", default='checkpoints/transformer_test/corpora')
-    parser.add_argument('-bert_model_dir', dest='bert_model_dir', action="store", default='./bert/teo/ro0/')
+    parser.add_argument('-bert_model_dir', dest='bert_model_dir', action="store", default='./bert/ro0/')
     
     parser.add_argument('-bert', dest='bert', action="store_true", default=False)
     parser.add_argument('-train_mode', dest='train_mode', action="store_true", default=False)
