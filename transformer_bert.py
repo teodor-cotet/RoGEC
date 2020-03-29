@@ -10,24 +10,71 @@ from typing import Dict, List, Tuple
 import bert
 import matplotlib.pyplot as plt
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+from absl import app as absl_app
 import tensorflow_datasets as tfds
 from bert.tokenization.bert_tokenization import FullTokenizer
 
-BUFFER_SIZE = 20000
-BATCH_SIZE = 8
-MAX_LENGTH = 252
-TRAIN_DEV_SPLIT = 0.9
-TOTAL_SAMPLES = 10e6
-EPOCHS = 100
-D_MODEL = 256
+
+# TPU cloud params
+tf.flags.DEFINE_string(
+    "tpu", default='teodor-cotet',
+    help="The Cloud TPU to use for training. This should be either the name "
+    "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 "
+    "url.")
+tf.flags.DEFINE_string(
+    "tpu_zone", default='us-central1-f',
+    help="[Optional] GCE zone where the Cloud TPU is located in. If not "
+    "specified, we will attempt to automatically detect the GCE project from "
+    "metadata.")
+tf.flags.DEFINE_string(
+    "gcp_project", default='rogec-271608',
+    help="[Optional] Project name for the Cloud TPU-enabled project. If not "
+    "specified, we will attempt to automatically detect the GCE project from "
+    "metadata.")
+tf.flags.DEFINE_bool("use_tpu", False, "Use TPUs rather than plain CPUs")
+
+
+# paths for model
+tf.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/1k_clean_dirty_better.txt', help='')
+tf.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_test',
+                help='Checpoint save locations, or restore')
+tf.flags.DEFINE_string('subwords', default='checkpoints/transformer_test/corpora', help='')
+tf.flags.DEFINE_string('bert_model_dir', default='./bert/ro0/', help='path from where to load bert')
+
+# mode of execution
+tf.flags.DEFINE_bool('bert', default=False, help='use bert as encoder or transformer')
+tf.flags.DEFINE_bool('train_mode', default=False, help='do training')
+tf.flags.DEFINE_bool('decode_mode',default=False, help='do prediction, decoding')
+
+# model params
+tf.flags.DEFINE_integer('num_layers', default=6, help='')
+tf.flags.DEFINE_integer('d_model', default=256,
+                        help='d_model size is the out of the embeddings, it must match the bert model size, if you use one')
+tf.flags.DEFINE_integer('dff', default=256, help='')
+tf.flags.DEFINE_integer('num_heads', default=8, help='')
+tf.flags.DEFINE_float('dropout', default=0.1, help='')
+tf.flags.DEFINE_integer('dict_size', default=(2**15), help='')
+tf.flags.DEFINE_integer('epochs', default=100, help='')
+tf.flags.DEFINE_integer('seq_length', default=256, help='')
+tf.flags.DEFINE_integer('buffer_size', default=20000, help='')
+tf.flags.DEFINE_integer('batch_size', default=8, help='')
+tf.flags.DEFINE_integer('max_length', default=252, help='')
+tf.flags.DEFINE_float('train_dev_split', default=0.9, help='')
+tf.flags.DEFINE_integer('total_samples', default=10000000, help='')
+
+# for prediction purposes
+tf.flags.DEFINE_string('in_file_decode', default='corpora/cna/dev_old/small_decode_test.txt', help='')
+tf.flags.DEFINE_string('out_file_decode', default='corpora/cna/dev_predicted_2.txt', help='')
+
+args = tf.flags.FLAGS
+
 tokenizer_pt, tokenizer_en, tokenizer_ro, tokenizer_bert = None, None, None, None
-args = None
 transformer, optimizer, train_loss, train_accuracy = None, None, None, None
 eval_loss, eval_accuracy = None, None
 train_step_signature = [
-        tf.TensorSpec(shape=(None, D_MODEL), dtype=tf.int64),
-        tf.TensorSpec(shape=(None, D_MODEL), dtype=tf.int64),
+        tf.TensorSpec(shape=(None, args.d_model), dtype=tf.int64),
+        tf.TensorSpec(shape=(None, args.d_model), dtype=tf.int64),
         tf.TensorSpec(shape=(None, None), dtype=tf.int64),
     ]
 eval_step_signature = [
@@ -47,8 +94,8 @@ def encode(lang1, lang2):
 
     return lang1, lang2
 
-"""Drop examples with > MAX_LENGTH """
-def filter_max_length(x, y, max_length=MAX_LENGTH):
+"""Drop examples with > args.max_length """
+def filter_max_length(x, y, max_length=args.max_length):
     return tf.logical_and(tf.size(x) <= max_length,
                         tf.size(y) <= max_length)
 
@@ -599,7 +646,7 @@ def gec_generator():
                 source = line.strip()
                 yield (source, target)
 
-def filter_max_length_gec(x, y, max_length=MAX_LENGTH):
+def filter_max_length_gec(x, y, max_length=args.max_length):
     return tf.logical_and(tf.size(x) <= max_length,
                         tf.size(y) <= max_length)
 
@@ -655,7 +702,7 @@ def construct_subwords_gec(examples: List):
     return tokenizer_ro
 
 def construct_datasets_gec():
-    global args, tokenizer_ro, TRAIN_DEV_SPLIT, TOTAL_SAMPLES
+    global args, tokenizer_ro
     examples = get_examples_gec()
     if os.path.isfile(args.subwords + '.subwords'):
         tokenizer_ro  = construct_subwords_gec(None)
@@ -663,26 +710,26 @@ def construct_datasets_gec():
     else:
         tokenizer_ro  = construct_subwords_gec(list(examples))
 
-    sample_train = int(TOTAL_SAMPLES * TRAIN_DEV_SPLIT)
+    sample_train = int(args.total_samples * args.train_dev_split)
 
     dataset = tf.data.Dataset.from_generator(gen_tensors_gec, output_types=(tf.string, tf.string))
     dataset = dataset.map(tf_encode_gec)
     train_dataset = dataset.take(sample_train)
     train_dataset = train_dataset.filter(filter_max_length_gec)
     # train_dataset = train_dataset.cache()
-    train_dataset = train_dataset.shuffle(BUFFER_SIZE).padded_batch(
-        BATCH_SIZE, padded_shapes=([args.seq_length], [-1])) # pad with 0
+    train_dataset = train_dataset.shuffle(args.buffer_size).padded_batch(
+        args.batch_size, padded_shapes=([args.seq_length], [-1])) # pad with 0
     train_dataset = train_dataset.prefetch(tf.data.experimental.AUTOTUNE) # how many batches to prefectch
     # train_dataset = train_dataset.prefetch(1)
 
     dev_dataset = dataset.skip(sample_train)
     dev_dataset = dev_dataset.filter(filter_max_length_gec)
-    dev_dataset = dev_dataset.shuffle(BUFFER_SIZE).padded_batch(
-        BATCH_SIZE, padded_shapes=([args.seq_length], [-1]))
+    dev_dataset = dev_dataset.shuffle(args.buffer_size).padded_batch(
+        args.batch_size, padded_shapes=([args.seq_length], [-1]))
     return train_dataset, dev_dataset
 
 def generate_sentence_gec(inp_sentence: str):
-    global tokenizer_ro, transformer, optimizer, args, MAX_LENGTH
+    global tokenizer_ro, transformer, optimizer, args
 
     if tokenizer_ro is None:
         if os.path.isfile(args.subwords + '.subwords'):
@@ -715,7 +762,7 @@ def generate_sentence_gec(inp_sentence: str):
     decoder_input = [tokenizer_ro.vocab_size]
     output = tf.expand_dims(decoder_input, 0)
 
-    for i in range(MAX_LENGTH):
+    for i in range(args.max_length):
         enc_padding_mask, combined_mask, dec_padding_mask = create_masks(
             encoder_input, output)
 
@@ -820,7 +867,7 @@ def get_model_gec():
     return transformer, optimizer
 
 def train_gec():
-    global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy, BATCH_SIZE
+    global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy
     with open('run.txt', 'wt') as log:
         
         train_dataset, dev_dataset = construct_datasets_gec()
@@ -920,47 +967,32 @@ def test_bert_trans():
 
     print(fn_out.shape)  # (batch_size, tar_seq_len, target_vocab_size)
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Process some integers.')
-    parser.add_argument('-dataset_file', dest='dataset_file', action="store",
-                         default='corpora/synthetic_wiki/1k_clean_dirty_better.txt')
-
-    parser.add_argument('-checkpoint', dest='checkpoint', action="store", default='checkpoints/transformer_test')
-    parser.add_argument('-subwords', dest='subwords', action="store", default='checkpoints/transformer_test/corpora')
-    parser.add_argument('-bert_model_dir', dest='bert_model_dir', action="store", default='./bert/ro0/')
-    
-    parser.add_argument('-bert', dest='bert', action="store_true", default=False)
-    parser.add_argument('-train_mode', dest='train_mode', action="store_true", default=False)
-    parser.add_argument('-decode_mode', dest='decode_mode', action="store_true", default=False)
-
-    """model params"""
-    parser.add_argument('-num_layers', dest='num_layers', action="store", type=int, default=6)
-    # d_model size is the out of the embeddings, it must match the bert model size, if you use one
-    parser.add_argument('-d_model', dest='d_model', action="store", type=int, default=256)
-    parser.add_argument('-dff', dest='dff', action="store", type=int, default=256)
-    parser.add_argument('-num_heads', dest='num_heads', action="store", type=int, default=8)
-    parser.add_argument('-dropout', dest='dropout', action="store", type=float, default=0.1)
-    parser.add_argument('-dict_size', dest='dict_size', action="store", type=int, default=(2**15))
-    parser.add_argument('-epochs', dest='epochs', action="store", type=int, default=100)
-    parser.add_argument('-seq_length', dest='seq_length', action="store", type=int, default=256)
-
-    # test stuff
-    parser.add_argument('-in_file_decode', dest='in_file_decode', action="store", default='corpora/cna/dev_old/small_decode_test.txt')
-    parser.add_argument('-out_file_decode', dest='out_file_decode', action="store", default='corpora/cna/dev_predicted_2.txt')
-    args = parser.parse_args()
-
-    for k in args.__dict__:
-        if args.__dict__[k] is not None:
-            print(k, '->', args.__dict__[k])
-
-    # example_pos_encoding()
-    # main()
-    # example_scaled_dot_attention()
-    # example_multihead_attention()
-    # example_point_wise_nn()
-    # construct_dataset_gec()
+def run_main():
     if args.train_mode:
         # test_bert_trans()
         train_gec()
     if args.decode_mode:
         correct_from_file(in_file=args.in_file_decode, out_file=args.out_file_decode)
+
+def main(argv):
+    del argv
+    global args
+    tf.logging.set_verbosity(tf.logging.INFO)
+
+    if args.use_tpu == True:
+        tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(args.tpu,
+             zone=args.tpu_zone, project=args.gcp_project)
+        tf.config.experimental_connect_to_cluster(tpu_cluster_resolver)
+        tf.tpu.experimental.initialize_tpu_system(tpu_cluster_resolver)
+        strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver, steps_per_run=128)
+        print('Running on TPU ', tpu_cluster_resolver.cluster_spec().as_dict()['worker'])
+        with strategy.scope():
+            run_main()
+    else:
+       run_main()
+
+if __name__ == "__main__":
+    # tf.disable_v2_behavior()
+    absl_app.run(main)
+
+   
