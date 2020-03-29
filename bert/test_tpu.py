@@ -7,46 +7,44 @@ import sys
 
 # pylint: disable=g-bad-import-order
 from absl import app as absl_app  # pylint: disable=unused-import
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 # pylint: enable=g-bad-import-order
 
 # For open source environment, add grandparent directory for import
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(sys.path[0]))))
 
 # Cloud TPU Cluster Resolver flags
-tf.flags.DEFINE_string(
+tf.compat.v1.flags.DEFINE_string(
     "tpu", default='teodor-cotet',
     help="The Cloud TPU to use for training. This should be either the name "
     "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 "
     "url.")
-tf.flags.DEFINE_string(
+tf.compat.v1.flags.DEFINE_string(
     "tpu_zone", default='us-central1-f',
     help="[Optional] GCE zone where the Cloud TPU is located in. If not "
     "specified, we will attempt to automatically detect the GCE project from "
     "metadata.")
-tf.flags.DEFINE_string(
+tf.compat.v1.flags.DEFINE_string(
     "gcp_project", default='rogec-271608',
     help="[Optional] Project name for the Cloud TPU-enabled project. If not "
     "specified, we will attempt to automatically detect the GCE project from "
     "metadata.")
 
 # Model specific parameters
-tf.flags.DEFINE_string("data_dir", "",
+tf.compat.v1.flags.DEFINE_string("data_dir", "",
                        "Path to directory containing the MNIST dataset")
-tf.flags.DEFINE_string("model_dir", None, "Estimator model_dir")
-tf.flags.DEFINE_integer("batch_size", 1024,
+tf.compat.v1.flags.DEFINE_string("model_dir", None, "Estimator model_dir")
+tf.compat.v1.flags.DEFINE_integer("batch_size", 1024,
                         "Mini-batch size for the training. Note that this "
                         "is the global batch size and not the per-shard batch.")
-tf.flags.DEFINE_integer("train_steps", 1000, "Total number of training steps.")
-tf.flags.DEFINE_bool("use_tpu", True, "Use TPUs rather than plain CPUs")
-tf.flags.DEFINE_integer("num_shards", 8, "Number of shards (TPU chips).")
+tf.compat.v1.flags.DEFINE_integer("train_steps", 1000, "Total number of training steps.")
+tf.compat.v1.flags.DEFINE_bool("use_tpu", True, "Use TPUs rather than plain CPUs")
+tf.compat.v1.flags.DEFINE_integer("num_shards", 8, "Number of shards (TPU chips).")
 
-FLAGS = tf.flags.FLAGS
+FLAGS = tf.compat.v1.flags.FLAGS
 print(FLAGS.gcp_project)
 
 def main(argv):
     del argv  # Unused.
-    tf.logging.set_verbosity(tf.logging.INFO)
 
     # tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
     #     FLAGS.tpu,
