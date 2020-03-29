@@ -1,15 +1,47 @@
-import os, re, time, json
-import numpy as np
-import tensorflow as tf
-from matplotlib import pyplot as plt
-print("Tensorflow version " + tf.__version__)
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
-import numpy as np
-import sys
-import absl
-import bert
-import functools
 import os
+import sys
+
+# pylint: disable=g-bad-import-order
+from absl import app as absl_app  # pylint: disable=unused-import
+import tensorflow.compat.v1 as tf
+# pylint: enable=g-bad-import-order
+
+# For open source environment, add grandparent directory for import
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(sys.path[0]))))
+
+# Cloud TPU Cluster Resolver flags
+tf.flags.DEFINE_string(
+    "tpu", default='teodor-cotet',
+    help="The Cloud TPU to use for training. This should be either the name "
+    "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 "
+    "url.")
+tf.flags.DEFINE_string(
+    "tpu_zone", default='us-central1-f',
+    help="[Optional] GCE zone where the Cloud TPU is located in. If not "
+    "specified, we will attempt to automatically detect the GCE project from "
+    "metadata.")
+tf.flags.DEFINE_string(
+    "gcp_project", default='rogec-271608',
+    help="[Optional] Project name for the Cloud TPU-enabled project. If not "
+    "specified, we will attempt to automatically detect the GCE project from "
+    "metadata.")
+
+# Model specific parameters
+tf.flags.DEFINE_string("data_dir", "",
+                       "Path to directory containing the MNIST dataset")
+tf.flags.DEFINE_string("model_dir", None, "Estimator model_dir")
+tf.flags.DEFINE_integer("batch_size", 1024,
+                        "Mini-batch size for the training. Note that this "
+                        "is the global batch size and not the per-shard batch.")
+tf.flags.DEFINE_integer("train_steps", 1000, "Total number of training steps.")
+tf.flags.DEFINE_bool("use_tpu", True, "Use TPUs rather than plain CPUs")
+tf.flags.DEFINE_integer("num_shards", 8, "Number of shards (TPU chips).")
+
+FLAGS = tf.flags.FLAGS
 
 
 def detect_accelerator():
@@ -17,8 +49,7 @@ def detect_accelerator():
         tpu = tf.distribute.cluster_resolver.TPUClusterResolver('teodor-cotet', zone=None, project=None) # TPU detection
     except ValueError:
         tpu = None
-        
-    gpus = tf.config.experimental.list_logical_devices("GPU")
+        gpus = tf.config.experimental.list_logical_devices("GPU")
 
 
     # Select appropriate distribution strategy
@@ -46,31 +77,61 @@ def detect_accelerator():
         except RuntimeError as e:
             print(e)
 
+def main(argv):
+    del argv  # Unused.
+    tf.logging.set_verbosity(tf.logging.INFO)
 
-FLAGS = absl.flags.FLAGS
+    tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
+        FLAGS.tpu,
+        zone=FLAGS.tpu_zone,
+        project=FLAGS.gcp_project
+    )
+    # added by me
+    if tpu_cluster_resolver:
+        tf.tpu.experimental.initialize_tpu_system(tpu_cluster_resolver)
+        strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver, steps_per_run=128) # Going back and forth between TPU and host is expensive. Better to run 128 batches on the TPU before reporting back.
+        print('Running on TPU ', tpu_cluster_resolver.cluster_spec().as_dict()['worker'])  
+    else:
+        print('no tpu')
 
+    run_config = tf.estimator.tpu.RunConfig(
+        cluster=tpu_cluster_resolver,
+        model_dir=FLAGS.model_dir,
+        session_config=tf.ConfigProto(
+            allow_soft_placement=True, log_device_placement=True),
+        tpu_config=tf.estimator.tpu.TPUConfig(FLAGS.iterations, FLAGS.num_shards),
+    )
 
+    # estimator = tf.estimator.tpu.TPUEstimator(
+    #     model_fn=model_fn,
+    #     use_tpu=FLAGS.use_tpu,
+    #     train_batch_size=FLAGS.batch_size,
+    #     eval_batch_size=FLAGS.batch_size,
+    #     predict_batch_size=FLAGS.batch_size,
+    #     params={"data_dir": FLAGS.data_dir},
+    #     config=run_config)
+    # # TPUEstimator.train *requires* a max_steps argument.
+    # estimator.train(input_fn=train_input_fn, max_steps=FLAGS.train_steps)
+    # # TPUEstimator.evaluate *requires* a steps argument.
+    # # Note that the number of examples used during evaluation is
+    # # --eval_steps * --batch_size.
+    # # So if you change --batch_size then change --eval_steps too.
+    # if FLAGS.eval_steps:
+    #     estimator.evaluate(input_fn=eval_input_fn, steps=FLAGS.eval_steps)
 
-absl.flags.DEFINE_integer('max_seq_len', 128, 'Maximum sequence length')
-# TODO: change default value to None
-absl.flags.DEFINE_string('model_folder_path', '../Models/ro0/', 'Path to bert model folder')
-absl.flags.DEFINE_float('learning_rate', 1e-5, 'Learning Rate used for optimization')
-absl.flags.DEFINE_integer('batch_size', 32, 'Batch size to use during training')
-absl.flags.DEFINE_integer('epochs', 1, 'Number of epochs to train')
-absl.flags.DEFINE_float('dropout_rate', 0.5, 'Dropout rate')
-absl.flags.DEFINE_integer('num_classes', 4, "Number of classes for clasification task")
-absl.flags.DEFINE_integer('experiment_index', 1, 'Index of current experiment. Will be appended to weights file')
-absl.flags.DEFINE_string('save_folder_path',".", "Save folder prefix")
-absl.flags.DEFINE_bool("use_tpu", False, "Use TPU or not")
-absl.flags.DEFINE_string("tpu_name", None, "Name of TPU instance")
+    # # Run prediction on top few samples of test data.
+    # if FLAGS.enable_predict:
+    #     predictions = estimator.predict(input_fn=predict_input_fn)
+
+    # for pred_dict in predictions:
+    #     template = ('Prediction is "{}" ({:.1f}%).')
+
+    #     class_id = pred_dict['class_ids']
+    #     probability = pred_dict['probabilities'][class_id]
+
+    #     print(template.format(class_id, 100 * probability))
 
 
 if __name__ == "__main__":
-  # create model
-  # if FLAGS.use_tpu == True:
-  #     tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(FLAGS.tpu_name, zone=None, project=None)
-  #     tf.config.experimental_connect_to_cluster(tpu_cluster_resolver)
-  #     tf.tpu.experimental.initialize_tpu_system(tpu_cluster_resolver)
-  #     strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver)
-  #     with strategy.scope():
-  detect_accelerator()
+  tf.disable_v2_behavior()
+  absl_app.run(main)
