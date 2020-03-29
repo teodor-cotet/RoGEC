@@ -10,64 +10,64 @@ from typing import Dict, List, Tuple
 import bert
 import matplotlib.pyplot as plt
 import numpy as np
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 from absl import app as absl_app
 import tensorflow_datasets as tfds
 from bert.tokenization.bert_tokenization import FullTokenizer
 
 
 # TPU cloud params
-tf.flags.DEFINE_string(
+tf.compat.v1.flags.DEFINE_string(
     "tpu", default='teodor-cotet',
     help="The Cloud TPU to use for training. This should be either the name "
     "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 "
     "url.")
-tf.flags.DEFINE_string(
+tf.compat.v1.flags.DEFINE_string(
     "tpu_zone", default='us-central1-f',
     help="[Optional] GCE zone where the Cloud TPU is located in. If not "
     "specified, we will attempt to automatically detect the GCE project from "
     "metadata.")
-tf.flags.DEFINE_string(
+tf.compat.v1.flags.DEFINE_string(
     "gcp_project", default='rogec-271608',
     help="[Optional] Project name for the Cloud TPU-enabled project. If not "
     "specified, we will attempt to automatically detect the GCE project from "
     "metadata.")
-tf.flags.DEFINE_bool("use_tpu", False, "Use TPUs rather than plain CPUs")
+tf.compat.v1.flags.DEFINE_bool("use_tpu", False, "Use TPUs rather than plain CPUs")
 
 
 # paths for model
-tf.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/1k_clean_dirty_better.txt', help='')
-tf.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_test',
+tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/1k_clean_dirty_better.txt', help='')
+tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_test',
                 help='Checpoint save locations, or restore')
-tf.flags.DEFINE_string('subwords', default='checkpoints/transformer_test/corpora', help='')
-tf.flags.DEFINE_string('bert_model_dir', default='./bert/ro0/', help='path from where to load bert')
+tf.compat.v1.flags.DEFINE_string('subwords', default='checkpoints/transformer_test/corpora', help='')
+tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='./bert/ro0/', help='path from where to load bert')
 
 # mode of execution
-tf.flags.DEFINE_bool('bert', default=False, help='use bert as encoder or transformer')
-tf.flags.DEFINE_bool('train_mode', default=False, help='do training')
-tf.flags.DEFINE_bool('decode_mode',default=False, help='do prediction, decoding')
+tf.compat.v1.flags.DEFINE_bool('bert', default=False, help='use bert as encoder or transformer')
+tf.compat.v1.flags.DEFINE_bool('train_mode', default=False, help='do training')
+tf.compat.v1.flags.DEFINE_bool('decode_mode',default=False, help='do prediction, decoding')
 
 # model params
-tf.flags.DEFINE_integer('num_layers', default=6, help='')
-tf.flags.DEFINE_integer('d_model', default=256,
+tf.compat.v1.flags.DEFINE_integer('num_layers', default=6, help='')
+tf.compat.v1.flags.DEFINE_integer('d_model', default=256,
                         help='d_model size is the out of the embeddings, it must match the bert model size, if you use one')
-tf.flags.DEFINE_integer('dff', default=256, help='')
-tf.flags.DEFINE_integer('num_heads', default=8, help='')
-tf.flags.DEFINE_float('dropout', default=0.1, help='')
-tf.flags.DEFINE_integer('dict_size', default=(2**15), help='')
-tf.flags.DEFINE_integer('epochs', default=100, help='')
-tf.flags.DEFINE_integer('seq_length', default=256, help='')
-tf.flags.DEFINE_integer('buffer_size', default=20000, help='')
-tf.flags.DEFINE_integer('batch_size', default=8, help='')
-tf.flags.DEFINE_integer('max_length', default=252, help='')
-tf.flags.DEFINE_float('train_dev_split', default=0.9, help='')
-tf.flags.DEFINE_integer('total_samples', default=10000000, help='')
+tf.compat.v1.flags.DEFINE_integer('dff', default=256, help='')
+tf.compat.v1.flags.DEFINE_integer('num_heads', default=8, help='')
+tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
+tf.compat.v1.flags.DEFINE_integer('dict_size', default=(2**15), help='')
+tf.compat.v1.flags.DEFINE_integer('epochs', default=100, help='')
+tf.compat.v1.flags.DEFINE_integer('seq_length', default=256, help='')
+tf.compat.v1.flags.DEFINE_integer('buffer_size', default=20000, help='')
+tf.compat.v1.flags.DEFINE_integer('batch_size', default=8, help='')
+tf.compat.v1.flags.DEFINE_integer('max_length', default=252, help='')
+tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.9, help='')
+tf.compat.v1.flags.DEFINE_integer('total_samples', default=10000000, help='')
 
-# for prediction purposes
-tf.flags.DEFINE_string('in_file_decode', default='corpora/cna/dev_old/small_decode_test.txt', help='')
-tf.flags.DEFINE_string('out_file_decode', default='corpora/cna/dev_predicted_2.txt', help='')
+# for prediction purposes only
+tf.compat.v1.flags.DEFINE_string('in_file_decode', default='corpora/cna/dev_old/small_decode_test.txt', help='')
+tf.compat.v1.flags.DEFINE_string('out_file_decode', default='corpora/cna/dev_predicted_2.txt', help='')
 
-args = tf.flags.FLAGS
+args = tf.compat.v1.flags.FLAGS
 
 tokenizer_pt, tokenizer_en, tokenizer_ro, tokenizer_bert = None, None, None, None
 transformer, optimizer, train_loss, train_accuracy = None, None, None, None
@@ -977,14 +977,13 @@ def run_main():
 def main(argv):
     del argv
     global args
-    tf.logging.set_verbosity(tf.logging.INFO)
 
     if args.use_tpu == True:
         tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(args.tpu,
              zone=args.tpu_zone, project=args.gcp_project)
         tf.config.experimental_connect_to_cluster(tpu_cluster_resolver)
         tf.tpu.experimental.initialize_tpu_system(tpu_cluster_resolver)
-        strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver, steps_per_run=128)
+        strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver)
         print('Running on TPU ', tpu_cluster_resolver.cluster_spec().as_dict()['worker'])
         with strategy.scope():
             run_main()
