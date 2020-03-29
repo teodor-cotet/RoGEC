@@ -81,26 +81,37 @@ def main(argv):
     del argv  # Unused.
     tf.logging.set_verbosity(tf.logging.INFO)
 
-    tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
-        FLAGS.tpu,
-        zone=FLAGS.tpu_zone,
-        project=FLAGS.gcp_project
-    )
-    # added by me
-    if tpu_cluster_resolver:
-        tf.tpu.experimental.initialize_tpu_system(tpu_cluster_resolver)
-        strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver, steps_per_run=128) # Going back and forth between TPU and host is expensive. Better to run 128 batches on the TPU before reporting back.
-        print('Running on TPU ', tpu_cluster_resolver.cluster_spec().as_dict()['worker'])  
-    else:
-        print('no tpu')
+    # tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
+    #     FLAGS.tpu,
+    #     zone=FLAGS.tpu_zone,
+    #     project=FLAGS.gcp_project
+    # )
+    # # added by me
+    # if tpu_cluster_resolver:
+    #     tf.tpu.experimental.initialize_tpu_system(tpu_cluster_resolver)
+    #     strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver, steps_per_run=128) # Going back and forth between TPU and host is expensive. Better to run 128 batches on the TPU before reporting back.
+    #     print('Running on TPU ', tpu_cluster_resolver.cluster_spec().as_dict()['worker'])  
+    # else:
+    #     print('no tpu')
 
-    run_config = tf.estimator.tpu.RunConfig(
-        cluster=tpu_cluster_resolver,
-        model_dir=FLAGS.model_dir,
-        session_config=tf.ConfigProto(
-            allow_soft_placement=True, log_device_placement=True),
-        tpu_config=tf.estimator.tpu.TPUConfig(FLAGS.iterations, FLAGS.num_shards),
-    )
+    if FLAGS.use_tpu == True:
+        tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
+        tf.config.experimental_connect_to_cluster(tpu_cluster_resolver)
+        tf.tpu.experimental.initialize_tpu_system(tpu_cluster_resolver)
+        strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver, steps_per_run=128)
+        print('Running on TPU ', tpu_cluster_resolver.cluster_spec().as_dict()['worker'])  
+    #     with strategy.scope():
+    #         model, bert = create_model()
+    # else:
+    #         model, bert = create_model()
+
+    # run_config = tf.estimator.tpu.RunConfig(
+    #     cluster=tpu_cluster_resolver,
+    #     model_dir=FLAGS.model_dir,
+    #     session_config=tf.ConfigProto(
+    #         allow_soft_placement=True, log_device_placement=True),
+    #     tpu_config=tf.estimator.tpu.TPUConfig(FLAGS.iterations, FLAGS.num_shards),
+    # )
 
     # estimator = tf.estimator.tpu.TPUEstimator(
     #     model_fn=model_fn,
@@ -110,7 +121,7 @@ def main(argv):
     #     predict_batch_size=FLAGS.batch_size,
     #     params={"data_dir": FLAGS.data_dir},
     #     config=run_config)
-    # # TPUEstimator.train *requires* a max_steps argument.
+    # TPUEstimator.train *requires* a max_steps argument.
     # estimator.train(input_fn=train_input_fn, max_steps=FLAGS.train_steps)
     # # TPUEstimator.evaluate *requires* a steps argument.
     # # Note that the number of examples used during evaluation is
