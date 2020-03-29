@@ -42,40 +42,7 @@ tf.flags.DEFINE_bool("use_tpu", True, "Use TPUs rather than plain CPUs")
 tf.flags.DEFINE_integer("num_shards", 8, "Number of shards (TPU chips).")
 
 FLAGS = tf.flags.FLAGS
-
-
-def detect_accelerator():
-    try:
-        tpu = tf.distribute.cluster_resolver.TPUClusterResolver('teodor-cotet', zone=None, project=None) # TPU detection
-    except ValueError:
-        tpu = None
-        gpus = tf.config.experimental.list_logical_devices("GPU")
-
-
-    # Select appropriate distribution strategy
-    if tpu:
-        tf.tpu.experimental.initialize_tpu_system(tpu)
-        strategy = tf.distribute.experimental.TPUStrategy(tpu, steps_per_run=128) # Going back and forth between TPU and host is expensive. Better to run 128 batches on the TPU before reporting back.
-        print('Running on TPU ', tpu.cluster_spec().as_dict()['worker'])  
-    elif len(gpus) > 1:
-        strategy = tf.distribute.MirroredStrategy([gpu.name for gpu in gpus])
-        print('Running on multiple GPUs ', [gpu.name for gpu in gpus])
-    elif len(gpus) == 1:
-        strategy = tf.distribute.get_strategy() # default strategy that works on CPU and single GPU
-        print('Running on single GPU ', gpus[0].name)
-    else:
-        strategy = tf.distribute.get_strategy() # default strategy that works on CPU and single GPU
-        print('Running on CPU')
-        print("Number of accelerators: ", strategy.num_replicas_in_sync)
-
-    gpus = tf.config.experimental.list_physical_devices('GPU')
-    if gpus:
-        try:
-            for gpu in gpus:
-                tf.config.experimental.set_memory_growth(gpu, True)
-
-        except RuntimeError as e:
-            print(e)
+print(FLAGS.gcp_project)
 
 def main(argv):
     del argv  # Unused.
@@ -99,7 +66,13 @@ def main(argv):
         tf.config.experimental_connect_to_cluster(tpu_cluster_resolver)
         tf.tpu.experimental.initialize_tpu_system(tpu_cluster_resolver)
         strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver, steps_per_run=128)
-        print('Running on TPU ', tpu_cluster_resolver.cluster_spec().as_dict()['worker'])  
+        print('Running on TPU ', tpu_cluster_resolver.cluster_spec().as_dict()['worker'])
+    else:
+        print(FLAGS.use_tpu)
+        # print(FLAGS)
+        # for k in FLAGS.__wrapped.__dict__:
+        #     if FLAGS.__dict__[k] is not None:
+        #         print(k, '->', FLAGS.__dict__[k])
     #     with strategy.scope():
     #         model, bert = create_model()
     # else:
@@ -141,8 +114,6 @@ def main(argv):
     #     probability = pred_dict['probabilities'][class_id]
 
     #     print(template.format(class_id, 100 * probability))
-
-
 if __name__ == "__main__":
-  tf.disable_v2_behavior()
-  absl_app.run(main)
+    # tf.disable_v2_behavior()
+    absl_app.run(main)
