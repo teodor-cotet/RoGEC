@@ -599,6 +599,8 @@ def gec_generator():
             elif i % 2 == 1:
                 source = line.strip()
                 source, target = encode_gec(source, target)
+                if len(source) > args.seq_length or len(target) > args.seq_length:
+                    continue
                 yield (source, target)
 
 def gec_generator_text():
@@ -611,10 +613,6 @@ def gec_generator_text():
             elif i % 2 == 1:
                 source = line.strip()
                 yield (source, target)
-
-def filter_max_length_gec(x, y, max_length=args.seq_length):
-    return tf.logical_and(tf.size(x) <= max_length,
-                        tf.size(y) <= max_length)
 
 def encode_gec(source: str, target: str):
     global args, tokenizer_ro, tokenizer_bert
@@ -680,7 +678,6 @@ def construct_datasets_gec():
 
     dataset = tf.data.Dataset.from_generator(gen_tensors_gec, output_types=(tf.int64, tf.int64))
     train_dataset = dataset.take(sample_train)
-    train_dataset = train_dataset.filter(filter_max_length_gec)
     # train_dataset = train_dataset.cache()
     train_dataset = train_dataset.shuffle(args.buffer_size).padded_batch(
         args.batch_size, padded_shapes=([args.seq_length], [-1])) # pad with 0
@@ -688,7 +685,6 @@ def construct_datasets_gec():
     # train_dataset = train_dataset.prefetch(1)
 
     dev_dataset = dataset.skip(sample_train)
-    dev_dataset = dev_dataset.filter(filter_max_length_gec)
     dev_dataset = dev_dataset.shuffle(args.buffer_size).padded_batch(
         args.batch_size, padded_shapes=([args.seq_length], [-1]))
     return train_dataset, dev_dataset
