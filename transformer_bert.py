@@ -36,13 +36,14 @@ tf.compat.v1.flags.DEFINE_bool("use_tpu", False, "Use TPUs rather than plain CPU
 
 
 # paths for model
-tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/1k_clean_dirty_better.txt', help='')
+tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/30k_clean_dirty_better.txt', help='')
 tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_test',
                 help='Checpoint save locations, or restore')
 tf.compat.v1.flags.DEFINE_string('subwords', default='checkpoints/transformer_test/corpora', help='')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='./bert/ro0/', help='path from where to load bert')
 
 # mode of execution
+"""if bert is used, the decoder is still a transofrmer with transformer specific tokenization"""
 tf.compat.v1.flags.DEFINE_bool('bert', default=False, help='use bert as encoder or transformer')
 tf.compat.v1.flags.DEFINE_bool('train_mode', default=False, help='do training')
 tf.compat.v1.flags.DEFINE_bool('decode_mode',default=False, help='do prediction, decoding')
@@ -51,17 +52,18 @@ tf.compat.v1.flags.DEFINE_bool('decode_mode',default=False, help='do prediction,
 tf.compat.v1.flags.DEFINE_integer('num_layers', default=6, help='')
 tf.compat.v1.flags.DEFINE_integer('d_model', default=256,
                         help='d_model size is the out of the embeddings, it must match the bert model size, if you use one')
+tf.compat.v1.flags.DEFINE_integer('seq_length', default=256, help='same as d_model')
 tf.compat.v1.flags.DEFINE_integer('dff', default=256, help='')
 tf.compat.v1.flags.DEFINE_integer('num_heads', default=8, help='')
 tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
 tf.compat.v1.flags.DEFINE_integer('dict_size', default=(2**15), help='')
 tf.compat.v1.flags.DEFINE_integer('epochs', default=100, help='')
-tf.compat.v1.flags.DEFINE_integer('seq_length', default=256, help='')
 tf.compat.v1.flags.DEFINE_integer('buffer_size', default=20000, help='')
 tf.compat.v1.flags.DEFINE_integer('batch_size', default=8, help='')
-tf.compat.v1.flags.DEFINE_integer('max_length', default=252, help='')
+tf.compat.v1.flags.DEFINE_integer('max_length', default=256, help='')
 tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.9, help='')
-tf.compat.v1.flags.DEFINE_integer('total_samples', default=10000000, help='')
+tf.compat.v1.flags.DEFINE_integer('total_samples', default=15000, help='')
+tf.compat.v1.flags.DEFINE_bool('show_batch_stats', default=True, help='do prediction, decoding')
 
 # for prediction purposes only
 tf.compat.v1.flags.DEFINE_string('in_file_decode', default='corpora/cna/dev_old/small_decode_test.txt', help='')
@@ -78,7 +80,8 @@ train_step_signature = [
         tf.TensorSpec(shape=(None, None), dtype=tf.int64),
     ]
 eval_step_signature = [
-        tf.TensorSpec(shape=(None, None), dtype=tf.int64),
+        tf.TensorSpec(shape=(None, args.d_model), dtype=tf.int64),
+        tf.TensorSpec(shape=(None, args.d_model), dtype=tf.int64),
         tf.TensorSpec(shape=(None, None), dtype=tf.int64),
     ]
 
@@ -94,8 +97,8 @@ def encode(lang1, lang2):
 
     return lang1, lang2
 
-"""Drop examples with > args.max_length """
-def filter_max_length(x, y, max_length=args.max_length):
+"""Drop examples with > args.seq_length """
+def filter_max_length(x, y, max_length=args.seq_length):
     return tf.logical_and(tf.size(x) <= max_length,
                         tf.size(y) <= max_length)
 
@@ -429,82 +432,26 @@ class Decoder(tf.keras.layers.Layer):
         # x.shape == (batch_size, target_seq_len, d_model)
         return x, attention_weights
 
-class BertModel:
-
-    def __init__(self, model_dir, max_seq_len):
-
-        self.model_dir = model_dir
-        self.tokenizer = FullTokenizer(vocab_file=model_dir+"vocab.vocab")
-        self.max_seq_len = max_seq_len
-        self.bert_layer = self.load_bert()
-
-    def load_bert(self):
-        bert_params = bert.params_from_pretrained_ckpt(self.model_dir)
-        bert_layer = bert.BertModelLayer.from_params(bert_params, name="bert_layer")
-        return bert_layer
-
-    def __get_segments(self, tokens):
-        sep_enc = self.tokenizer.convert_tokens_to_ids(['[SEP]'])
-        segments = []
-        current_segment_id = 0
-        for token in tokens:
-            segments.append(current_segment_id)
-            if token == sep_enc[0]:
-                if current_segment_id == 0:
-                    current_segment_id = 1
-        return segments
-
-    # use it with sentence2=None for single sentence
-    def process_sentences(self, sentence1, sentence2=None):
-        tokens = ['[CLS]']
-        tokens.extend(self.tokenizer.tokenize(sentence1))
-        tokens.append('[SEP]')
-        if sentence2 != None:
-            tokens.extend(self.tokenizer.tokenize(sentence2))
-            tokens.append('[SEP]')
-
-        input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
-        input_masks = [1] * len(input_ids)
-        input_segments = self.__get_segments(input_ids)
-
-        if self.max_seq_len == None:
-            input_ids = np.array(input_ids)
-            input_masks = np.array(input_masks)
-            input_segments = np.array(input_segments)
-            
-            return input_ids, input_masks, input_segments
-
-        else: # pad or trim
-            if len(input_ids) < self.max_seq_len: # pad
-                to_add = self.max_seq_len-len(input_ids)
-                for _ in range(to_add):
-                    input_ids.append(0)
-                    input_masks.append(0)
-                    input_segments.append(0)
-
-            elif len(input_ids) > self.max_seq_len: # trim
-                input_ids = input_ids[:self.max_seq_len]
-                input_masks = input_masks[:self.max_seq_len]
-                input_segments = input_segments[:self.max_seq_len]
-
-            input_ids = np.array(input_ids)
-            input_masks = np.array(input_masks)
-            input_segments = np.array(input_segments)
-
-            return input_ids, input_masks, input_segments
-
 class TransformerBert(tf.keras.Model):
 
-    def __init__(self, num_layers, d_model, num_heads, dff, input_vocab_size, 
-                target_vocab_size, model_dir, pe_input, pe_target, rate=0.1):
+    def __init__(self, num_layers=None, d_model=None, num_heads=None, dff=None,
+                input_vocab_size=None, 
+                target_vocab_size=None, model_dir=None, pe_input=None, pe_target=None, rate=0.1, 
+                decoder=None, final_layer=None):
         super(TransformerBert, self).__init__()
 
         self.encoder = BertEncoder(model_dir=model_dir, d_model=d_model)
-        self.decoder = Decoder(num_layers, d_model, num_heads, dff, 
+        if decoder:
+            self.decoder = decoder
+        else:
+            self.decoder = Decoder(num_layers, d_model, num_heads, dff, 
                             target_vocab_size, pe_target, rate)
         # self.segments = np.zeros((d_model,))
         # self.ids = np.ones((d_model,))
-        self.final_layer = tf.keras.layers.Dense(target_vocab_size)
+        if final_layer:
+            self.final_layer = final_layer
+        else:
+            self.final_layer = tf.keras.layers.Dense(target_vocab_size)
         
     def call(self, input_ids, input_seg, tar, training, enc_padding_mask, 
             look_ahead_mask, dec_padding_mask):
@@ -585,7 +532,7 @@ def create_masks(inp, tar):
     return enc_padding_mask, combined_mask, dec_padding_mask
 
 @tf.function(input_signature=eval_step_signature)
-def eval_step(inp, tar):
+def eval_step(inp, inp_seg, tar):
     global transformer, optimizer, eval_loss, eval_accuracy
     tar_inp = tar[:, :-1]
     tar_real = tar[:, 1:]
@@ -593,7 +540,14 @@ def eval_step(inp, tar):
     enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
 
     with tf.GradientTape() as tape:
-        predictions, _ = transformer(inp, tar_inp, 
+        if args.bert:
+            predictions, _ = transformer(inp, inp_seg, tar_inp, 
+                                    True, 
+                                    enc_padding_mask, 
+                                    combined_mask, 
+                                    dec_padding_mask)
+        else:
+            predictions, _ = transformer(inp, tar_inp, 
                                     True, 
                                     enc_padding_mask, 
                                     combined_mask, 
@@ -637,7 +591,19 @@ def train_step(inp, inp_seg, tar):
 
 def gec_generator():
     global args
-    print(args.dataset_file)
+
+    with open(args.dataset_file, 'r', encoding='utf-8', errors='replace') as f:
+        for i, line in enumerate(f):
+            if i % 2 == 0:
+                target = line.strip()
+            elif i % 2 == 1:
+                source = line.strip()
+                source, target = encode_gec(source, target)
+                yield (source, target)
+
+def gec_generator_text():
+    global args
+
     with open(args.dataset_file, 'r', encoding='utf-8', errors='replace') as f:
         for i, line in enumerate(f):
             if i % 2 == 0:
@@ -646,42 +612,42 @@ def gec_generator():
                 source = line.strip()
                 yield (source, target)
 
-def filter_max_length_gec(x, y, max_length=args.max_length):
+def filter_max_length_gec(x, y, max_length=args.seq_length):
     return tf.logical_and(tf.size(x) <= max_length,
                         tf.size(y) <= max_length)
 
 def encode_gec(source: str, target: str):
-    global tokenizer_ro, tokenizer_bert
+    global args, tokenizer_ro, tokenizer_bert
     if args.bert:
         tokens = ['[CLS]']
-        tokens.extend(tokenizer_bert.tokenize(source.numpy()))
+        tokens.extend(tokenizer_bert.tokenize(source))
         tokens.append('[SEP]')
         source = tokenizer_bert.convert_tokens_to_ids(tokens)
+        # target = [tokenizer_bert.vocab_size] + tokenizer_bert.convert_tokens_to_ids(tokenizer_bert.tokenize(target)) +\
+        #         [tokenizer_bert.vocab_size + 1]
     else:
-        source = [tokenizer_ro.vocab_size] + tokenizer_ro.encode(source.numpy()) +\
+        source = [tokenizer_ro.vocab_size] + tokenizer_ro.encode(source) +\
             [tokenizer_ro.vocab_size + 1]
-    target = [tokenizer_ro.vocab_size] + tokenizer_ro.encode(target.numpy()) +\
-         [tokenizer_ro.vocab_size + 1]
+    target = [tokenizer_ro.vocab_size] + tokenizer_ro.encode(target) +\
+            [tokenizer_ro.vocab_size + 1]
     return source, target
-
-def tf_encode_gec(source: str, target: str):
-    return tf.py_function(func=encode_gec, inp=[source, target], Tout=[tf.int64, tf.int64])
 
 def gen_tensors_gec():
     gen = gec_generator()
     for s, t in gen:
-        yield (tf.convert_to_tensor(s, dtype=tf.string), 
-                tf.convert_to_tensor(t, dtype=tf.string))
+        yield (tf.convert_to_tensor(s, dtype=tf.int64), 
+                tf.convert_to_tensor(t, dtype=tf.int64))
 
 def get_examples_gec() -> List[str]:
-    global args, tokenizer_ro
-    gen = gec_generator()
+    global args
+    gen = gec_generator_text()
     return gen
 
 def construct_subwords_gec(examples: List):
     global args, tokenizer_bert, tokenizer_ro
     if args.bert:
         tokenizer_bert = FullTokenizer(vocab_file=args.bert_model_dir + "vocab.vocab")
+        tokenizer_bert.vocab_size = len(tokenizer_bert.vocab)
     if examples is None:
         tokenizer_ro = tfds.features.text.SubwordTextEncoder.load_from_file(args.subwords)
         return tokenizer_ro
@@ -712,8 +678,7 @@ def construct_datasets_gec():
 
     sample_train = int(args.total_samples * args.train_dev_split)
 
-    dataset = tf.data.Dataset.from_generator(gen_tensors_gec, output_types=(tf.string, tf.string))
-    dataset = dataset.map(tf_encode_gec)
+    dataset = tf.data.Dataset.from_generator(gen_tensors_gec, output_types=(tf.int64, tf.int64))
     train_dataset = dataset.take(sample_train)
     train_dataset = train_dataset.filter(filter_max_length_gec)
     # train_dataset = train_dataset.cache()
@@ -733,28 +698,37 @@ def generate_sentence_gec(inp_sentence: str):
 
     if tokenizer_ro is None:
         if os.path.isfile(args.subwords + '.subwords'):
-            print('Vocabulary loaded\n')
             tokenizer_ro  = construct_subwords_gec(None)
         else:
             examples = get_examples_gec()
             tokenizer_ro  = construct_subwords_gec(examples)
 
+    if args.bert:
+        tokenizer_bert = FullTokenizer(vocab_file=args.bert_model_dir + "vocab.vocab")
+        tokenizer_bert.vocab_size = len(tokenizer_bert.vocab)
+
     if transformer is None:
         transformer, optimizer = get_model_gec()
-        ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
+        if args.bert:
+            ckpt = tf.train.Checkpoint(decoder=transformer.decoder, final_layer=transformer.final_layer, optimizer=optimizer)
+        else:
+            ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
+
         ckpt_manager = tf.train.CheckpointManager(ckpt, args.checkpoint, max_to_keep=5)
         if ckpt_manager.latest_checkpoint:
-            # print(optimizer._decayed_lr(tf.float32))
             # loading mechanis matches variables from the tf graph and resotres their values
             ckpt.restore(ckpt_manager.latest_checkpoint)
         else:
             print('No checkpoints for transformers. Aborting')
             return None
-
-    start_token = [tokenizer_ro.vocab_size]
-    end_token = [tokenizer_ro.vocab_size + 1]
-
-    inp_sentence = start_token + tokenizer_ro.encode(inp_sentence) + end_token
+    if args.bert:
+        start_token = ['[CLS]']
+        end_token = ['[SEP]']
+        inp_sentence = tokenizer_bert.convert_tokens_to_ids(start_token + tokenizer_bert.tokenize(inp_sentence) + end_token)
+    else:
+        start_token = [tokenizer_ro.vocab_size]
+        end_token = [tokenizer_ro.vocab_size + 1]
+        inp_sentence = start_token + tokenizer_ro.encode(inp_sentence) + end_token
     encoder_input = tf.expand_dims(inp_sentence, 0)
 
     # as the target is english, the first word to the transformer should be the
@@ -762,12 +736,13 @@ def generate_sentence_gec(inp_sentence: str):
     decoder_input = [tokenizer_ro.vocab_size]
     output = tf.expand_dims(decoder_input, 0)
 
-    for i in range(args.max_length):
+    for i in range(args.seq_length):
         enc_padding_mask, combined_mask, dec_padding_mask = create_masks(
             encoder_input, output)
 
         # predictions.shape == (batch_size, seq_len, vocab_size)
-        predictions, attention_weights = transformer(encoder_input, 
+        inp_seg = tf.zeros(shape=encoder_input.shape, dtype=tf.dtypes.int64)
+        predictions, attention_weights = transformer(encoder_input, inp_seg, 
                                                         output,
                                                         False,
                                                         enc_padding_mask,
@@ -824,8 +799,9 @@ def plot_attention_weights_gec(attention, sentence, result, layer):
 def correct_from_file(in_file: str, out_file: str):
     with open(in_file, 'r') as fin, open(out_file, 'w') as fout:
         for line in fin:
-            print(line)
             predicted_sentences = correct_gec(line)
+            print(line)
+            print(predicted_sentences)
             #fout.write(line)
             fout.write(predicted_sentences + '\n')
             fout.flush()
@@ -871,10 +847,6 @@ def train_gec():
     with open('run.txt', 'wt') as log:
         
         train_dataset, dev_dataset = construct_datasets_gec()
-        
-        # for x, y in train_dataset.take(5):
-        #     print(x)
-        #     print(x.shape)
 
         train_loss = tf.keras.metrics.Mean(name='train_loss')
         train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
@@ -882,11 +854,13 @@ def train_gec():
         eval_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='eval_accuracy')
 
         transformer, optimizer = get_model_gec()
-        # object you want to checkpoint are saved as attributes of the chepoint obj
-        ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
+        # object you want to checkpoint are saved as attributes of the checkpoint obj
+        if args.bert:
+            ckpt = tf.train.Checkpoint(decoder=transformer.decoder, final_layer=transformer.final_layer, optimizer=optimizer)
+        else:
+            ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
         ckpt_manager = tf.train.CheckpointManager(ckpt, args.checkpoint, max_to_keep=5)
         if ckpt_manager.latest_checkpoint:
-            # print(optimizer._decayed_lr(tf.float32))
             # loading mechanis matches variables from the tf graph and resotres their values
             ckpt.restore(ckpt_manager.latest_checkpoint)
             print('Latest checkpoint restored!!')
@@ -900,10 +874,11 @@ def train_gec():
             eval_loss.reset_states()
             eval_accuracy.reset_states()
 
+
             for (batch, (inp, tar)) in enumerate(train_dataset):
                 inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
                 train_step(inp, inp_seg, tar)
-                if batch % 5000 == 0:
+                if args.show_batch_stats and batch % 5000 == 0:
                     print('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
                         epoch + 1, batch, train_loss.result(), train_accuracy.result()))
                     log.write('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
@@ -925,8 +900,9 @@ def train_gec():
             log.flush()
 
             for (batch, (inp, tar)) in enumerate(dev_dataset):
-                eval_step(inp, tar)
-                if batch % 1000 == 0:
+                inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
+                eval_step(inp, inp_seg, tar)
+                if args.show_batch_stats and batch % 1000 == 0:
                     print('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
                         epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
                     log.write('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
