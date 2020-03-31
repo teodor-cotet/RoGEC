@@ -33,6 +33,7 @@ tf.compat.v1.flags.DEFINE_string(
     "specified, we will attempt to automatically detect the GCE project from "
     "metadata.")
 tf.compat.v1.flags.DEFINE_bool("use_tpu", False, "Use TPUs rather than plain CPUs")
+tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from where to load bert')
 
 
 # paths for model 30k_clean_dirty_better
@@ -725,8 +726,10 @@ def generate_sentence_gec(inp_sentence: str):
             ckpt = tf.train.Checkpoint(decoder=transformer.decoder, final_layer=transformer.final_layer, optimizer=optimizer)
         else:
             ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
-
-        ckpt_manager = tf.train.CheckpointManager(ckpt, args.checkpoint, max_to_keep=5)
+        if args.use_tpu:
+            ckpt_manager = tf.train.CheckpointManager(ckpt, 'gs://' + args.bucket + '/' + args.checkpoint, max_to_keep=5)
+        else:
+            ckpt_manager = tf.train.CheckpointManager(ckpt, args.checkpoint, max_to_keep=5)
         if ckpt_manager.latest_checkpoint:
             # loading mechanis matches variables from the tf graph and resotres their values
             ckpt.restore(ckpt_manager.latest_checkpoint)
@@ -882,7 +885,10 @@ def train_gec():
             ckpt = tf.train.Checkpoint(decoder=transformer.decoder, final_layer=transformer.final_layer, optimizer=optimizer)
         else:
             ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
-        ckpt_manager = tf.train.CheckpointManager(ckpt, args.checkpoint, max_to_keep=5)
+        if args.bert:
+            ckpt_manager = tf.train.CheckpointManager(ckpt, 'gs://' + args.bucket + '/' + args.checkpoint, max_to_keep=5)
+        else:
+            ckpt_manager = tf.train.CheckpointManager(ckpt, args.checkpoint, max_to_keep=5)
         if ckpt_manager.latest_checkpoint:
             # loading mechanis matches variables from the tf graph and resotres their values
             ckpt.restore(ckpt_manager.latest_checkpoint)
