@@ -833,8 +833,9 @@ def correct_from_file(in_file: str, out_file: str):
             print(line)
             print(predicted_sentences)
             #fout.write(line)
-            fout.write(predicted_sentences + '\n')
-            fout.flush()
+            if args.use_tpu == False:
+                fout.write(predicted_sentences + '\n')
+                fout.flush()
 
 def correct_gec(sentence: str, plot=''):
     global tokenizer_ro
