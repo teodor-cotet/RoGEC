@@ -35,7 +35,7 @@ tf.compat.v1.flags.DEFINE_string(
 tf.compat.v1.flags.DEFINE_bool("use_tpu", False, "Use TPUs rather than plain CPUs")
 
 
-# paths for model
+# paths for model 30k_clean_dirty_better
 tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/30k_clean_dirty_better.txt', help='')
 tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_test',
                 help='Checpoint save locations, or restore')
@@ -59,7 +59,7 @@ tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
 tf.compat.v1.flags.DEFINE_integer('dict_size', default=(2**15), help='')
 tf.compat.v1.flags.DEFINE_integer('epochs', default=100, help='')
 tf.compat.v1.flags.DEFINE_integer('buffer_size', default=20000, help='')
-tf.compat.v1.flags.DEFINE_integer('batch_size', default=8, help='')
+tf.compat.v1.flags.DEFINE_integer('batch_size', default=256, help='')
 tf.compat.v1.flags.DEFINE_integer('max_length', default=256, help='')
 tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.9, help='')
 tf.compat.v1.flags.DEFINE_integer('total_samples', default=15000, help='')
@@ -614,6 +614,16 @@ def gec_generator_text():
                 source = line.strip()
                 yield (source, target)
 
+def make_fixed_length(input_ids: List[int], max_seq_len: int):
+
+    if len(input_ids) < max_seq_len: # pad
+        to_add = max_seq_len-len(input_ids)
+        for _ in range(to_add):
+            input_ids.append(0)
+    elif len(input_ids) > max_seq_len: # trim
+        input_ids = input_ids[:max_seq_len]
+    return input_ids
+
 def encode_gec(source: str, target: str):
     global args, tokenizer_ro, tokenizer_bert
     if args.bert:
@@ -628,6 +638,10 @@ def encode_gec(source: str, target: str):
             [tokenizer_ro.vocab_size + 1]
     target = [tokenizer_ro.vocab_size] + tokenizer_ro.encode(target) +\
             [tokenizer_ro.vocab_size + 1]
+    
+    source = make_fixed_length(source, args.seq_length)
+    target = make_fixed_length(target, args.seq_length)
+  
     return source, target
 
 def gen_tensors_gec():
@@ -675,18 +689,19 @@ def construct_datasets_gec():
         tokenizer_ro  = construct_subwords_gec(list(examples))
 
     sample_train = int(args.total_samples * args.train_dev_split)
+    gen_dataset = gen_tensors_gec()
+    # from generator doest work on tpu
+    dataset = list(gen_dataset)
+    dataset = tf.data.Dataset.from_tensor_slices(dataset)
 
-    dataset = tf.data.Dataset.from_generator(gen_tensors_gec, output_types=(tf.int64, tf.int64))
     train_dataset = dataset.take(sample_train)
     # train_dataset = train_dataset.cache()
-    train_dataset = train_dataset.shuffle(args.buffer_size).padded_batch(
-        args.batch_size, padded_shapes=([args.seq_length], [-1])) # pad with 0
+    train_dataset = train_dataset.shuffle(args.buffer_size).batch(args.batch_size, drop_remainder=True)
     train_dataset = train_dataset.prefetch(tf.data.experimental.AUTOTUNE) # how many batches to prefectch
     # train_dataset = train_dataset.prefetch(1)
 
     dev_dataset = dataset.skip(sample_train)
-    dev_dataset = dev_dataset.shuffle(args.buffer_size).padded_batch(
-        args.batch_size, padded_shapes=([args.seq_length], [-1]))
+    dev_dataset = dev_dataset.shuffle(args.buffer_size).batch(args.batch_size, drop_remainder=True)
     return train_dataset, dev_dataset
 
 def generate_sentence_gec(inp_sentence: str):
@@ -737,13 +752,21 @@ def generate_sentence_gec(inp_sentence: str):
             encoder_input, output)
 
         # predictions.shape == (batch_size, seq_len, vocab_size)
-        inp_seg = tf.zeros(shape=encoder_input.shape, dtype=tf.dtypes.int64)
-        predictions, attention_weights = transformer(encoder_input, inp_seg, 
-                                                        output,
-                                                        False,
-                                                        enc_padding_mask,
-                                                        combined_mask,
-                                                        dec_padding_mask)
+        if args.bert:
+            inp_seg = tf.zeros(shape=encoder_input.shape, dtype=tf.dtypes.int64)
+            predictions, attention_weights = transformer(encoder_input, inp_seg, 
+                                                            output,
+                                                            False,
+                                                            enc_padding_mask,
+                                                            combined_mask,
+                                                            dec_padding_mask)
+        else:
+            predictions, attention_weights = transformer(encoder_input, 
+                                                            output,
+                                                            False,
+                                                            enc_padding_mask,
+                                                            combined_mask,
+                                                            dec_padding_mask)
 
         # select the last word from the seq_len dimension
         predictions = predictions[: ,-1:, :]  # (batch_size, 1, vocab_size)
@@ -863,6 +886,14 @@ def train_gec():
             # print(optimizer._decayed_lr(tf.float32))
 
         # train
+        # for batch, data in enumerate(train_dataset.take(2)):
+        #     inp, tar = tf.split(data, num_or_size_splits=2, axis=1)
+        #     inps = tf.split(inp, num_or_size_splits=8, axis=0)
+        #     tars = tf.split(tar, num_or_size_splits=8, axis=0)
+            #inp, tar = tf.squeeze(inp), tf.squeeze(tar)
+            # for i in range(0, 8):
+            #     print(inps[i], tars[i])
+
         for epoch in range(args.epochs):
             start = time.time()
             train_loss.reset_states()
@@ -870,8 +901,9 @@ def train_gec():
             eval_loss.reset_states()
             eval_accuracy.reset_states()
 
-
-            for (batch, (inp, tar)) in enumerate(train_dataset):
+            for batch, data in enumerate(train_dataset):
+                inp, tar = tf.split(data, num_or_size_splits=2, axis=1)
+                inp, tar = tf.squeeze(inp), tf.squeeze(tar)
                 inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
                 train_step(inp, inp_seg, tar)
                 if args.show_batch_stats and batch % 5000 == 0:
@@ -894,8 +926,9 @@ def train_gec():
                                                             train_loss.result(), 
                                                             train_accuracy.result()))
             log.flush()
-
-            for (batch, (inp, tar)) in enumerate(dev_dataset):
+            for batch, data in enumerate(dev_dataset):
+                inp, tar = tf.split(data, num_or_size_splits=2, axis=1)
+                inp, tar = tf.squeeze(inp), tf.squeeze(tar)
                 inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
                 eval_step(inp, inp_seg, tar)
                 if args.show_batch_stats and batch % 1000 == 0:
