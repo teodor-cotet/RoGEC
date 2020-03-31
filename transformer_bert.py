@@ -40,7 +40,7 @@ tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from whe
 tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/1k_clean_dirty_better.txt', help='')
 tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_test',
                 help='Checpoint save locations, or restore')
-tf.compat.v1.flags.DEFINE_string('subwords', default='checkpoints/transformer_test/corpora', help='')
+# tf.compat.v1.flags.DEFINE_string('subwords', default='checkpoints/transformer_test/corpora', help='')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='./bert/ro0/', help='path from where to load bert')
 
 # mode of execution
@@ -71,6 +71,13 @@ tf.compat.v1.flags.DEFINE_string('in_file_decode', default='corpora/cna/dev_old/
 tf.compat.v1.flags.DEFINE_string('out_file_decode', default='corpora/cna/dev_predicted_2.txt', help='')
 
 args = tf.compat.v1.flags.FLAGS
+
+if args.use_tpu:
+    subwords_path = 'gs://' + args.bucket + '/' + args.checkpoint + '/corpora'
+    checkpoint_path = 'gs://' + args.bucket + '/' + args.checkpoint
+else:
+    subwords_path = args.checkpoint + '/corpora'
+    checkpoint_path = args.checkpoint
 
 tokenizer_pt, tokenizer_en, tokenizer_ro, tokenizer_bert = None, None, None, None
 transformer, optimizer, train_loss, train_accuracy = None, None, None, None
@@ -658,12 +665,12 @@ def get_examples_gec() -> List[str]:
     return gen
 
 def construct_subwords_gec(examples: List):
-    global args, tokenizer_bert, tokenizer_ro
+    global args, tokenizer_bert, tokenizer_ro, subwords_path
     if args.bert:
         tokenizer_bert = FullTokenizer(vocab_file=args.bert_model_dir + "vocab.vocab")
         tokenizer_bert.vocab_size = len(tokenizer_bert.vocab)
     if examples is None:
-        tokenizer_ro = tfds.features.text.SubwordTextEncoder.load_from_file(args.subwords)
+        tokenizer_ro = tfds.features.text.SubwordTextEncoder.load_from_file(subwords_path)
         return tokenizer_ro
 
     merged_examples = []
@@ -674,17 +681,17 @@ def construct_subwords_gec(examples: List):
     tokenizer_ro = tfds.features.text.SubwordTextEncoder.build_from_corpus(
             merged_examples, target_vocab_size=args.dict_size)
     
-    if not os.path.exists(args.subwords):
-        os.makedirs(args.subwords)
+    if not os.path.exists(subwords_path):
+        os.makedirs(subwords_path)
 
-    tokenizer_ro.save_to_file(args.subwords)
+    tokenizer_ro.save_to_file(subwords_path)
 
     return tokenizer_ro
 
 def construct_datasets_gec():
-    global args, tokenizer_ro
+    global args, tokenizer_ro, subwords_path
     examples = get_examples_gec()
-    if os.path.isfile(args.subwords + '.subwords'):
+    if os.path.isfile(subwords_path + '.subwords'):
         tokenizer_ro  = construct_subwords_gec(None)
         print('subwords restored')
     else:
@@ -707,10 +714,10 @@ def construct_datasets_gec():
     return train_dataset, dev_dataset
 
 def generate_sentence_gec(inp_sentence: str):
-    global tokenizer_ro, transformer, optimizer, args
+    global tokenizer_ro, transformer, optimizer, args, subwords_path, checkpoint_path
 
     if tokenizer_ro is None:
-        if os.path.isfile(args.subwords + '.subwords'):
+        if os.path.isfile(subwords_path + '.subwords'):
             tokenizer_ro  = construct_subwords_gec(None)
         else:
             examples = get_examples_gec()
@@ -726,10 +733,8 @@ def generate_sentence_gec(inp_sentence: str):
             ckpt = tf.train.Checkpoint(decoder=transformer.decoder, final_layer=transformer.final_layer, optimizer=optimizer)
         else:
             ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
-        if args.use_tpu:
-            ckpt_manager = tf.train.CheckpointManager(ckpt, 'gs://' + args.bucket + '/' + args.checkpoint, max_to_keep=5)
-        else:
-            ckpt_manager = tf.train.CheckpointManager(ckpt, args.checkpoint, max_to_keep=5)
+        
+        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
         if ckpt_manager.latest_checkpoint:
             # loading mechanis matches variables from the tf graph and resotres their values
             ckpt.restore(ckpt_manager.latest_checkpoint)
@@ -866,7 +871,7 @@ def get_model_gec():
     return transformer, optimizer
 
 def train_gec():
-    global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy, strategy
+    global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy, strategy, checkpoint_path
     with open('run.txt', 'wt') as log:
         
         train_dataset, dev_dataset = construct_datasets_gec()
@@ -885,10 +890,8 @@ def train_gec():
             ckpt = tf.train.Checkpoint(decoder=transformer.decoder, final_layer=transformer.final_layer, optimizer=optimizer)
         else:
             ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
-        if args.bert:
-            ckpt_manager = tf.train.CheckpointManager(ckpt, 'gs://' + args.bucket + '/' + args.checkpoint, max_to_keep=5)
-        else:
-            ckpt_manager = tf.train.CheckpointManager(ckpt, args.checkpoint, max_to_keep=5)
+       
+        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
         if ckpt_manager.latest_checkpoint:
             # loading mechanis matches variables from the tf graph and resotres their values
             ckpt.restore(ckpt_manager.latest_checkpoint)
