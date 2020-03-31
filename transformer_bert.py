@@ -937,7 +937,6 @@ def train_gec():
                 inp, tar = tf.split(data, num_or_size_splits=2, axis=1)
                 inp, tar = tf.squeeze(inp), tf.squeeze(tar)
                 inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
-                eval_step(inp, inp_seg, tar)
                 if args.use_tpu:
                     strategy.experimental_run_v2(fn=eval_step, args=(inp, inp_seg, tar,))
                 else:
