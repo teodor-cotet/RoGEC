@@ -75,6 +75,8 @@ args = tf.compat.v1.flags.FLAGS
 if args.use_tpu:
     subwords_path = 'gs://' + args.bucket + '/' + args.checkpoint + '/corpora'
     checkpoint_path = 'gs://' + args.bucket + '/' + args.checkpoint
+    args.in_file_decode = 'gs://' + args.in_file_decode
+    args.out_file_decode = 'gs://' + args.out_file_decode
 else:
     subwords_path = args.checkpoint + '/corpora'
     checkpoint_path = args.checkpoint
