@@ -989,7 +989,7 @@ def run_main():
 
 def main(argv):
     del argv
-    global args
+    global args, strategy
 
     if args.use_tpu == True:
         tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(args.tpu,
