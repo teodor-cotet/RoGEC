@@ -585,11 +585,7 @@ def train_step(inp, inp_seg, tar):
         loss = loss_function(tar_real, predictions)
     gradients = tape.gradient(loss, transformer.trainable_variables)
 
-    if args.use_tpu:
-        grad_vars = zip(gradients, transformer.trainable_variables)
-        tf.distribute.Strategy.experimental_run_v2(optimizer.apply_gradients, args=(grad_vars,))
-    else:
-        optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
+    optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
 
     train_loss(loss)
     train_accuracy(tar_real, predictions)
@@ -913,7 +909,10 @@ def train_gec():
                 inp, tar = tf.split(data, num_or_size_splits=2, axis=1)
                 inp, tar = tf.squeeze(inp), tf.squeeze(tar)
                 inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
-                train_step(inp, inp_seg, tar)
+                if args.use_tpu:
+                    strategy.experimental_run_v2(fn=train_step, args=(inp, inp_seg, tar,))
+                else:
+                    train_step(inp, inp_seg, tar)
                 if args.show_batch_stats and batch % 5000 == 0:
                     print('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
                         epoch + 1, batch, train_loss.result(), train_accuracy.result()))
@@ -939,6 +938,10 @@ def train_gec():
                 inp, tar = tf.squeeze(inp), tf.squeeze(tar)
                 inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
                 eval_step(inp, inp_seg, tar)
+                if args.use_tpu:
+                    strategy.experimental_run_v2(fn=eval_step, args=(inp, inp_seg, tar,))
+                else:
+                    eval_step(inp, inp_seg, tar)
                 if args.show_batch_stats and batch % 1000 == 0:
                     print('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
                         epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
