@@ -36,7 +36,7 @@ tf.compat.v1.flags.DEFINE_bool("use_tpu", False, "Use TPUs rather than plain CPU
 
 
 # paths for model 30k_clean_dirty_better
-tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/30k_clean_dirty_better.txt', help='')
+tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/1k_clean_dirty_better.txt', help='')
 tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_test',
                 help='Checpoint save locations, or restore')
 tf.compat.v1.flags.DEFINE_string('subwords', default='checkpoints/transformer_test/corpora', help='')
@@ -59,10 +59,10 @@ tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
 tf.compat.v1.flags.DEFINE_integer('dict_size', default=(2**15), help='')
 tf.compat.v1.flags.DEFINE_integer('epochs', default=100, help='')
 tf.compat.v1.flags.DEFINE_integer('buffer_size', default=20000, help='')
-tf.compat.v1.flags.DEFINE_integer('batch_size', default=256, help='')
+tf.compat.v1.flags.DEFINE_integer('batch_size', default=8, help='')
 tf.compat.v1.flags.DEFINE_integer('max_length', default=256, help='')
 tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.9, help='')
-tf.compat.v1.flags.DEFINE_integer('total_samples', default=15000, help='')
+tf.compat.v1.flags.DEFINE_integer('total_samples', default=500, help='')
 tf.compat.v1.flags.DEFINE_bool('show_batch_stats', default=True, help='do prediction, decoding')
 
 # for prediction purposes only
@@ -74,6 +74,7 @@ args = tf.compat.v1.flags.FLAGS
 tokenizer_pt, tokenizer_en, tokenizer_ro, tokenizer_bert = None, None, None, None
 transformer, optimizer, train_loss, train_accuracy = None, None, None, None
 eval_loss, eval_accuracy = None, None
+strategy = None
 train_step_signature = [
         tf.TensorSpec(shape=(None, args.d_model), dtype=tf.int64),
         tf.TensorSpec(shape=(None, args.d_model), dtype=tf.int64),
@@ -558,7 +559,7 @@ def eval_step(inp, inp_seg, tar):
 
 @tf.function(input_signature=train_step_signature)
 def train_step(inp, inp_seg, tar):
-    global transformer, optimizer, train_loss, train_accuracy
+    global transformer, optimizer, train_loss, train_accuracy, strategy
     tar_inp = tar[:, :-1]
     tar_real = tar[:, 1:]
 
@@ -582,9 +583,13 @@ def train_step(inp, inp_seg, tar):
                                     combined_mask, 
                                     dec_padding_mask)
         loss = loss_function(tar_real, predictions)
+    gradients = tape.gradient(loss, transformer.trainable_variables)
 
-    gradients = tape.gradient(loss, transformer.trainable_variables)    
-    optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
+    if args.use_tpu:
+        grad_vars = zip(gradients, transformer.trainable_variables)
+        tf.distribute.Strategy.experimental_run_v2(optimizer.apply_gradients, args=(grad_vars,))
+    else:
+        optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
 
     train_loss(loss)
     train_accuracy(tar_real, predictions)
@@ -862,10 +867,13 @@ def get_model_gec():
     return transformer, optimizer
 
 def train_gec():
-    global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy
+    global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy, strategy
     with open('run.txt', 'wt') as log:
         
         train_dataset, dev_dataset = construct_datasets_gec()
+        if args.use_tpu:
+            train_dataset = strategy.experimental_distribute_dataset(train_dataset)
+            dev_dataset = strategy.experimental_distribute_dataset(train_dataset)
 
         train_loss = tf.keras.metrics.Mean(name='train_loss')
         train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
@@ -893,7 +901,7 @@ def train_gec():
             #inp, tar = tf.squeeze(inp), tf.squeeze(tar)
             # for i in range(0, 8):
             #     print(inps[i], tars[i])
-
+        
         for epoch in range(args.epochs):
             start = time.time()
             train_loss.reset_states()
