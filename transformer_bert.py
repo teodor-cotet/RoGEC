@@ -59,7 +59,7 @@ tf.compat.v1.flags.DEFINE_integer('num_heads', default=8, help='')
 tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
 tf.compat.v1.flags.DEFINE_integer('dict_size', default=(2**15), help='')
 tf.compat.v1.flags.DEFINE_integer('epochs', default=100, help='')
-tf.compat.v1.flags.DEFINE_integer('buffer_size', default=20000, help='')
+tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(8*1024*1024), help='')
 tf.compat.v1.flags.DEFINE_integer('batch_size', default=8, help='')
 tf.compat.v1.flags.DEFINE_integer('max_length', default=256, help='')
 tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.9, help='')
@@ -857,6 +857,8 @@ def get_model_gec():
     learning_rate = CustomSchedule(args.d_model)
     optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, 
                                      epsilon=1e-9)
+    if args.use_tpu:
+        optimizer = tf.tpu.CrossShardOptimizer(optimizer)
     if args.bert is True:
         transformer = TransformerBert(args.num_layers, args.d_model, args.num_heads, args.dff,
                             vocab_size, vocab_size,
