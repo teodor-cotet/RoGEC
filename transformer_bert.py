@@ -858,7 +858,7 @@ def get_model_gec():
     optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, 
                                      epsilon=1e-9)
     if args.use_tpu:
-        optimizer = tf.tpu.CrossShardOptimizer(optimizer)
+        optimizer = tf.compat.v1.tpu.CrossShardOptimizer(optimizer)
     if args.bert is True:
         transformer = TransformerBert(args.num_layers, args.d_model, args.num_heads, args.dff,
                             vocab_size, vocab_size,
