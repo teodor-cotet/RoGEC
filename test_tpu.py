@@ -68,8 +68,8 @@ def main(argv):
     del argv
 
     if args.use_tpu:
-        tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(args.tpu,
-                zone=args.tpu_zone, project=args.gcp_project)
+        tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(args.tpu)
+         #        zone=args.tpu_zone, project=args.gcp_project)
         tf.config.experimental_connect_to_cluster(tpu_cluster_resolver)
         tf.tpu.experimental.initialize_tpu_system(tpu_cluster_resolver)
         strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver)
