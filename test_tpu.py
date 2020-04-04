@@ -29,6 +29,7 @@ def gen_test():
         yield data[i], labels[i]
 
 def run_model():
+    batch_size = 64
     # dataset = tf.data.Dataset.from_generator(
     #         generator=gen_test, 
     #         output_types=(tf.int32, tf.int32),
@@ -39,7 +40,7 @@ def run_model():
     samples_labels = [s[1] for s in samples]
 
     dataset = tf.data.Dataset.from_tensor_slices((samples_data, samples_labels))
-    dataset = dataset.batch(32, drop_remainder=True)
+    dataset = dataset.cache().repeat().batch(batch_size, drop_remainder=True)
 
     inp = tf.keras.Input(shape=(8,))
     x = tf.keras.layers.Dense(4, activation='relu')(inp)
@@ -49,7 +50,7 @@ def run_model():
     model.compile(optimizer=tf.keras.optimizers.Adam(),
                   loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False),
                   metrics=['accuracy'])
-    model.fit(np.asarray(samples_data), np.asarray(samples_labels), epochs=100)
+    model.fit(dataset, epochs=100, steps_per_epoch=1024//batch_size)
 
 def main(argv):
     del argv
