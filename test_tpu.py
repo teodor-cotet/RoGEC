@@ -28,7 +28,7 @@ def gen_test():
     for i, _ in enumerate(data):
         yield data[i], labels[i]
 
-def run_model(strategy):
+def get_dataset():
     batch_size = 64
     # dataset = tf.data.Dataset.from_generator(
     #         generator=gen_test, 
@@ -41,6 +41,9 @@ def run_model(strategy):
 
     dataset = tf.data.Dataset.from_tensor_slices((samples_data, samples_labels))
     dataset = dataset.cache().repeat().batch(batch_size, drop_remainder=True)
+    return dataset, batch_size
+
+def run_model(strategy):
 
     if args.use_tpu:
         with strategy.scope():
@@ -52,6 +55,8 @@ def run_model(strategy):
             model.compile(optimizer=optimizer,
                         loss='sparse_categorical_crossentropy',
                         metrics=['sparse_categorical_accuracy'])
+
+        dataset, batch_size = get_dataset()
         model.fit(dataset, epochs=100, steps_per_epoch=1024//batch_size)
     else:
         inp = tf.keras.Input(shape=(8,))
@@ -62,6 +67,7 @@ def run_model(strategy):
         model.compile(optimizer=optimizer,
                     loss='sparse_categorical_crossentropy',
                     metrics=['sparse_categorical_accuracy'])
+        dataset, batch_size = get_dataset()
         model.fit(dataset, epochs=100, steps_per_epoch=1024//batch_size)
 
 def main(argv):
