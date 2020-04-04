@@ -52,7 +52,7 @@ def run_model(strategy):
             model.compile(optimizer=optimizer,
                         loss='sparse_categorical_crossentropy',
                         metrics=['sparse_categorical_accuracy'])
-            model.fit(dataset, epochs=100, steps_per_epoch=1024//batch_size)
+        model.fit(dataset, epochs=100, steps_per_epoch=1024//batch_size)
     else:
         inp = tf.keras.Input(shape=(8,))
         x = tf.keras.layers.Dense(4, activation='relu')(inp)
