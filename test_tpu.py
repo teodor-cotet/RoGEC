@@ -28,7 +28,7 @@ def gen_test():
     for i, _ in enumerate(data):
         yield data[i], labels[i]
 
-def run_model():
+def run_model(strategy):
     batch_size = 64
     # dataset = tf.data.Dataset.from_generator(
     #         generator=gen_test, 
@@ -44,13 +44,23 @@ def run_model():
 
     inp = tf.keras.Input(shape=(8,))
     x = tf.keras.layers.Dense(4, activation='relu')(inp)
-    y = tf.keras.layers.Dense(2, activation=tf.nn.softmax)(x)
-
-    model = tf.keras.Model(inputs=inp, outputs=y)
-    model.compile(optimizer=tf.keras.optimizers.Adam(),
-                  loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False),
-                  metrics=['accuracy'])
-    model.fit(dataset, epochs=100, steps_per_epoch=1024//batch_size)
+    y = tf.keras.layers.Dense(2, activation='softmax')(x)
+    
+    if args.use_tpu:
+        with strategy.scope():
+            model = tf.keras.Model(inputs=inp, outputs=y)
+            optimizer = tf.keras.optimizers.SGD()
+            model.compile(optimizer=optimizer,
+                        loss='sparse_categorical_crossentropy',
+                        metrics=['sparse_categorical_accuracy'])
+            model.fit(dataset, epochs=100, steps_per_epoch=1024//batch_size)
+    else:
+        model = tf.keras.Model(inputs=inp, outputs=y)
+        optimizer = tf.keras.optimizers.SGD()
+        model.compile(optimizer=optimizer,
+                    loss='sparse_categorical_crossentropy',
+                    metrics=['sparse_categorical_accuracy'])
+        model.fit(dataset, epochs=100, steps_per_epoch=1024//batch_size)
 
 def main(argv):
     del argv
@@ -62,9 +72,8 @@ def main(argv):
         tf.tpu.experimental.initialize_tpu_system(tpu_cluster_resolver)
         strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver)
         print('Running on TPU ', tpu_cluster_resolver.cluster_spec().as_dict()['worker'])
-        with strategy.scope():
-            run_model()
+        run_model(strategy)
     else:
-        run_model()
+        run_model(None)
 if __name__ == "__main__":
     absl_app.run(main)
