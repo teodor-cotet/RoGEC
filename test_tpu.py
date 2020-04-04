@@ -29,11 +29,18 @@ def gen_test():
         yield data[i], labels[i]
 
 def run_model():
-    dataset = tf.data.Dataset.from_generator(
-            generator=gen_test, 
-            output_types=(tf.int32, tf.int32),
-            output_shapes=(tf.TensorShape([None]), tf.TensorShape([])))
+    # dataset = tf.data.Dataset.from_generator(
+    #         generator=gen_test, 
+    #         output_types=(tf.int32, tf.int32),
+    #         output_shapes=(tf.TensorShape([None]), tf.TensorShape([])))
+    it = gen_test()
+    samples = list(it)
+    samples_data = [s[0] for s in samples]
+    samples_labels = [s[1] for s in samples]
+
+    dataset = tf.data.Dataset.from_tensor_slices((samples_data, samples_labels))
     dataset = dataset.batch(32, drop_remainder=True)
+    
     inp = tf.keras.Input(shape=(8,))
     x = tf.keras.layers.Dense(4, activation='relu')(inp)
     y = tf.keras.layers.Dense(2, activation=tf.nn.softmax)(x)
