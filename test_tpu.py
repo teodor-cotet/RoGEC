@@ -1,0 +1,62 @@
+import tensorflow as tf
+import numpy as np
+from absl import app as absl_app
+
+tf.compat.v1.flags.DEFINE_bool("use_tpu", False, "Use TPUs rather than plain CPUs")
+tf.compat.v1.flags.DEFINE_string(
+    "tpu", default='teodor-cotet',
+    help="The Cloud TPU to use for training. This should be either the name "
+    "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 "
+    "url.")
+tf.compat.v1.flags.DEFINE_string(
+    "tpu_zone", default='us-central1-f',
+    help="[Optional] GCE zone where the Cloud TPU is located in. If not "
+    "specified, we will attempt to automatically detect the GCE project from "
+    "metadata.")
+tf.compat.v1.flags.DEFINE_string(
+    "gcp_project", default='rogec-271608',
+    help="[Optional] Project name for the Cloud TPU-enabled project. If not "
+    "specified, we will attempt to automatically detect the GCE project from "
+    "metadata.")
+    
+args = tf.compat.v1.flags.FLAGS
+
+def gen_test():
+    data = np.random.uniform(.0, 1.0, (1024, 8))
+    labels = np.random.randint(2, size=(1024,))
+
+    for i, _ in enumerate(data):
+        yield data[i], labels[i]
+
+def run_model():
+    dataset = tf.data.Dataset.from_generator(
+            generator=gen_test, 
+            output_types=(tf.int32, tf.int32),
+            output_shapes=(tf.TensorShape([None]), tf.TensorShape([])))
+    dataset = dataset.batch(32, drop_remainder=True)
+    inp = tf.keras.Input(shape=(8,))
+    x = tf.keras.layers.Dense(4, activation='relu')(inp)
+    y = tf.keras.layers.Dense(2, activation=tf.nn.softmax)(x)
+
+    model = tf.keras.Model(inputs=inp, outputs=y)
+    model.compile(optimizer=tf.keras.optimizers.Adam(),
+                  loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False),
+                  metrics=['accuracy'])
+    model.fit(dataset, epochs=100)
+
+def main(argv):
+    del argv
+
+    if args.use_tpu:
+        tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(args.tpu,
+                zone=args.tpu_zone, project=args.gcp_project)
+        tf.config.experimental_connect_to_cluster(tpu_cluster_resolver)
+        tf.tpu.experimental.initialize_tpu_system(tpu_cluster_resolver)
+        strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver)
+        print('Running on TPU ', tpu_cluster_resolver.cluster_spec().as_dict()['worker'])
+        with strategy.scope():
+            run_model()
+    else:
+        run_model()
+if __name__ == "__main__":
+    absl_app.run(main)
