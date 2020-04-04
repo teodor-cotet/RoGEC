@@ -42,12 +42,11 @@ def run_model(strategy):
     dataset = tf.data.Dataset.from_tensor_slices((samples_data, samples_labels))
     dataset = dataset.cache().repeat().batch(batch_size, drop_remainder=True)
 
-    inp = tf.keras.Input(shape=(8,))
-    x = tf.keras.layers.Dense(4, activation='relu')(inp)
-    y = tf.keras.layers.Dense(2, activation='softmax')(x)
-    
     if args.use_tpu:
         with strategy.scope():
+            inp = tf.keras.Input(shape=(8,))
+            x = tf.keras.layers.Dense(4, activation='relu')(inp)
+            y = tf.keras.layers.Dense(2, activation='softmax')(x)
             model = tf.keras.Model(inputs=inp, outputs=y)
             optimizer = tf.keras.optimizers.SGD()
             model.compile(optimizer=optimizer,
@@ -55,6 +54,9 @@ def run_model(strategy):
                         metrics=['sparse_categorical_accuracy'])
             model.fit(dataset, epochs=100, steps_per_epoch=1024//batch_size)
     else:
+        inp = tf.keras.Input(shape=(8,))
+        x = tf.keras.layers.Dense(4, activation='relu')(inp)
+        y = tf.keras.layers.Dense(2, activation='softmax')(x)
         model = tf.keras.Model(inputs=inp, outputs=y)
         optimizer = tf.keras.optimizers.SGD()
         model.compile(optimizer=optimizer,
