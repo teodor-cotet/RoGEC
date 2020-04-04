@@ -40,7 +40,7 @@ def run_model():
 
     dataset = tf.data.Dataset.from_tensor_slices((samples_data, samples_labels))
     dataset = dataset.batch(32, drop_remainder=True)
-    
+
     inp = tf.keras.Input(shape=(8,))
     x = tf.keras.layers.Dense(4, activation='relu')(inp)
     y = tf.keras.layers.Dense(2, activation=tf.nn.softmax)(x)
@@ -49,7 +49,7 @@ def run_model():
     model.compile(optimizer=tf.keras.optimizers.Adam(),
                   loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False),
                   metrics=['accuracy'])
-    model.fit(dataset, epochs=100)
+    model.fit(np.asarray(samples_data), np.asarray(samples_labels), epochs=100)
 
 def main(argv):
     del argv
