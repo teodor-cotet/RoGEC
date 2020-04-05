@@ -1,5 +1,5 @@
 import tensorflow as tf
-
+import numpy as np
 import os
 import tensorflow_datasets as tfds
 from absl import app as absl_app
@@ -46,8 +46,20 @@ def get_dataset(batch_size=200):
 
   return train_dataset, test_dataset
 
+def get_dataset_simple(batch_size=32):
+    data = np.random.uniform(.0, 1.0, (1024, 28, 28, 1))
+    labels = np.random.randint(10, size=(1024,))
+
+    train_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
+    test_dataset = tf.data.Dataset.from_tensor_slices((data[:64], labels[:64]))
+
+    train_dataset = train_dataset.shuffle(10000).repeat().batch(batch_size)
+    test_dataset = test_dataset.repeat().batch(batch_size)
+    return train_dataset, test_dataset
+
 def main(argv):
     del argv
+    batch_size = 32
     if args.use_tpu:
         resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=args.tpu)
         tf.config.experimental_connect_to_cluster(resolver)
@@ -61,7 +73,7 @@ def main(argv):
                             loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
                             metrics=['sparse_categorical_accuracy'])
 
-            train_dataset, test_dataset = get_dataset()
+            train_dataset, test_dataset = get_dataset_simple()
 
             model.fit(train_dataset, epochs=5, validation_data=test_dataset)
     else:
@@ -70,9 +82,9 @@ def main(argv):
                         loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
                         metrics=['sparse_categorical_accuracy'])
 
-        train_dataset, test_dataset = get_dataset()
+        train_dataset, test_dataset = get_dataset_simple()
 
-        model.fit(train_dataset, epochs=5, validation_data=test_dataset)
+        model.fit(train_dataset, epochs=5, validation_data=test_dataset, steps_per_epoch=1024//batch_size, validation_steps=2)
 
 if __name__ == "__main__":
     absl_app.run(main)
