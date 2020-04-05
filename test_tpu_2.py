@@ -34,7 +34,7 @@ def create_model():
   return tf.keras.Sequential(
       [tf.keras.layers.Conv2D(512, 3, activation='relu', input_shape=(64, 64, 1)),
        tf.keras.layers.Flatten(),
-       tf.keras.layers.Dense(64, activation='relu'),
+       tf.keras.layers.Dense(128, activation='relu'),
        tf.keras.layers.Dense(10)])
 
 def get_dataset(batch_size=200):
@@ -72,6 +72,27 @@ def get_custom_dataset(total_samples, batch_size):
 
     return train_dataset
 
+
+def generator():
+    global args
+    for _ in range(args.samples):
+        data = np.random.uniform(.0, 2.0, (64, 64, 1))
+        data = tf.convert_to_tensor(data, dtype=tf.float32)
+
+        label = np.random.randint(10)
+        label = tf.convert_to_tensor(label, dtype=tf.int32)
+        yield (data, label)
+
+def get_generator_dataset(total_samples, batch_size):
+    global args
+    train_dataset = tf.data.Dataset.from_generator(generator, 
+                                                    output_types=(tf.float32, tf.int32), 
+                                                    output_shapes=(tf.TensorShape([64, 64, 1]), tf.TensorShape([])))
+    if args.use_map:
+        train_dataset = train_dataset.map(scale_funct)
+    train_dataset = train_dataset.repeat(5).batch(batch_size, drop_remainder=True)
+    return train_dataset
+
 def main(argv):
     del argv
     global args
@@ -93,7 +114,7 @@ def main(argv):
         print(model.summary())
         print(model.count_params())
 
-        train_dataset = get_custom_dataset(total_samples, batch_size)
+        train_dataset = get_generator_dataset(total_samples, batch_size)
         model.fit(train_dataset, epochs=5, steps_per_epoch=total_samples//batch_size)
     else:
         model = create_model()
@@ -102,7 +123,7 @@ def main(argv):
                         metrics=['sparse_categorical_accuracy'])
         print(model.summary())
         print(model.count_params())
-        train_dataset = get_custom_dataset(total_samples, batch_size)
+        train_dataset = get_generator_dataset(total_samples, batch_size)
         model.fit(train_dataset, epochs=5, steps_per_epoch=total_samples//batch_size)
 
 if __name__ == "__main__":
