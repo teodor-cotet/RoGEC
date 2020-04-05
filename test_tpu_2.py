@@ -5,6 +5,7 @@ import tensorflow_datasets as tfds
 from absl import app as absl_app
 
 tf.compat.v1.flags.DEFINE_bool("use_tpu", False, "Use TPUs rather than plain CPUs")
+tf.compat.v1.flags.DEFINE_bool("use_map", False, "")
 tf.compat.v1.flags.DEFINE_string(
     "tpu", default='teodor-cotet',
     help="The Cloud TPU to use for training. This should be either the name "
@@ -20,14 +21,20 @@ tf.compat.v1.flags.DEFINE_string(
     help="[Optional] Project name for the Cloud TPU-enabled project. If not "
     "specified, we will attempt to automatically detect the GCE project from "
     "metadata.")
-    
+tf.compat.v1.flags.DEFINE_integer(
+    "samples", default=1024,
+    help="")
+tf.compat.v1.flags.DEFINE_integer(
+    "batch", default=8,
+    help="")
+
 args = tf.compat.v1.flags.FLAGS
 
 def create_model():
   return tf.keras.Sequential(
-      [tf.keras.layers.Conv2D(32, 3, activation='relu', input_shape=(28, 28, 1)),
+      [tf.keras.layers.Conv2D(512, 3, activation='relu', input_shape=(64, 64, 1)),
        tf.keras.layers.Flatten(),
-       tf.keras.layers.Dense(128, activation='relu'),
+       tf.keras.layers.Dense(64, activation='relu'),
        tf.keras.layers.Dense(10)])
 
 def get_dataset(batch_size=200):
@@ -46,23 +53,31 @@ def get_dataset(batch_size=200):
 
   return train_dataset, test_dataset
 
-def get_dataset_simple(batch_size=32):
-    data = np.random.uniform(.0, 1.0, (1024, 28, 28, 1))
-    data = tf.convert_to_tensor(data, dtype=tf.float32)
-    labels = np.random.randint(10, size=(1024,))
-    labels = tf.convert_to_tensor(labels, dtype=tf.float32)
+def scale_funct(image, label):
+    image /= 2.0
+    return image, label
 
+def get_custom_dataset(total_samples, batch_size):
+    global args
+    data = np.random.uniform(.0, 2.0, (total_samples, 64, 64, 1))
+    data = tf.convert_to_tensor(data, dtype=tf.float32)
+
+    labels = np.random.randint(10, size=(total_samples,))
+    labels = tf.convert_to_tensor(labels, dtype=tf.int32)
 
     train_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
-    test_dataset = tf.data.Dataset.from_tensor_slices((data[:64], labels[:64]))
+    if args.use_map:
+        train_dataset = train_dataset.map(scale_funct)
+    train_dataset = train_dataset.repeat(5).batch(batch_size, drop_remainder=True)
 
-    train_dataset = train_dataset.repeat(5).batch(batch_size)
-    test_dataset = test_dataset.repeat(5).batch(batch_size)
-    return train_dataset, test_dataset
+    return train_dataset
 
 def main(argv):
     del argv
-    batch_size = 32
+    global args
+    batch_size = args.batch
+    total_samples = args.samples
+
     if args.use_tpu:
         resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=args.tpu)
         tf.config.experimental_connect_to_cluster(resolver)
@@ -75,19 +90,20 @@ def main(argv):
             model.compile(optimizer='adam',
                             loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
                             metrics=['sparse_categorical_accuracy'])
+        print(model.summary())
+        print(model.count_params())
 
-            train_dataset, test_dataset = get_dataset_simple()
-
-            model.fit(train_dataset, epochs=5, steps_per_epoch=1024//batch_size)
+        train_dataset = get_custom_dataset(total_samples, batch_size)
+        model.fit(train_dataset, epochs=5, steps_per_epoch=total_samples//batch_size)
     else:
         model = create_model()
         model.compile(optimizer='adam',
                         loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
                         metrics=['sparse_categorical_accuracy'])
-
-        train_dataset, test_dataset = get_dataset_simple()
-
-        model.fit(train_dataset, epochs=5, steps_per_epoch=1024//batch_size)
+        print(model.summary())
+        print(model.count_params())
+        train_dataset = get_custom_dataset(total_samples, batch_size)
+        model.fit(train_dataset, epochs=5, steps_per_epoch=total_samples//batch_size)
 
 if __name__ == "__main__":
     absl_app.run(main)
