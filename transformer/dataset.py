@@ -63,7 +63,6 @@ def gec_generator(tokenizer_ro, tokenizer_bert, args):
                 yield (source, target)
 
 def gec_generator_text(args):
-
     with open(args.dataset_file, 'r', encoding='utf-8', errors='replace') as f:
         for i, line in enumerate(f):
             if i % 2 == 0:

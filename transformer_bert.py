@@ -232,7 +232,7 @@ def get_model_gec():
 def train_gec():
     global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy, strategy, checkpoint_path
 
-    @tf.function(input_signature=eval_step_signature)
+    # @tf.function(input_signature=eval_step_signature)
     def eval_step(inp, inp_seg, tar):
         global transformer, optimizer, eval_loss, eval_accuracy
         tar_inp = tar[:, :-1]
@@ -257,7 +257,7 @@ def train_gec():
         eval_loss(loss)
         eval_accuracy(tar_real, predictions)
 
-    @tf.function(input_signature=train_step_signature)
+    # @tf.function(input_signature=train_step_signature)
     def train_step(inp, inp_seg, tar):
         global transformer, optimizer, train_loss, train_accuracy, strategy
         tar_inp = tar[:, :-1]
@@ -325,7 +325,8 @@ def train_gec():
             #inp, tar = tf.squeeze(inp), tf.squeeze(tar)
             # for i in range(0, 8):
             #     print(inps[i], tars[i])
-        
+        print('starting training...')
+
         for epoch in range(args.epochs):
             start = time.time()
             train_loss.reset_states()
