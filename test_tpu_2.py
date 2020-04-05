@@ -48,13 +48,16 @@ def get_dataset(batch_size=200):
 
 def get_dataset_simple(batch_size=32):
     data = np.random.uniform(.0, 1.0, (1024, 28, 28, 1))
+    data = tf.convert_to_tensor(data, dtype=tf.float32)
     labels = np.random.randint(10, size=(1024,))
+    labels = tf.convert_to_tensor(labels, dtype=tf.float32)
+
 
     train_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
     test_dataset = tf.data.Dataset.from_tensor_slices((data[:64], labels[:64]))
 
-    train_dataset = train_dataset.repeat(5).batch(batch_size).cache()
-    test_dataset = test_dataset.repeat(5).batch(batch_size).cache()
+    train_dataset = train_dataset.repeat(5).batch(batch_size)
+    test_dataset = test_dataset.repeat(5).batch(batch_size)
     return train_dataset, test_dataset
 
 def main(argv):
