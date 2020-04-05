@@ -53,8 +53,8 @@ def get_dataset_simple(batch_size=32):
     train_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
     test_dataset = tf.data.Dataset.from_tensor_slices((data[:64], labels[:64]))
 
-    train_dataset = train_dataset.shuffle(10000).repeat().batch(batch_size)
-    test_dataset = test_dataset.repeat().batch(batch_size)
+    train_dataset = train_dataset.repeat(5).batch(batch_size)
+    test_dataset = test_dataset.repeat(5).batch(batch_size)
     return train_dataset, test_dataset
 
 def main(argv):
@@ -75,7 +75,7 @@ def main(argv):
 
             train_dataset, test_dataset = get_dataset_simple()
 
-            model.fit(train_dataset, epochs=5, validation_data=test_dataset, steps_per_epoch=1024//batch_size, validation_steps=2)
+            model.fit(train_dataset, epochs=5, steps_per_epoch=1024//batch_size)
     else:
         model = create_model()
         model.compile(optimizer='adam',
@@ -84,7 +84,7 @@ def main(argv):
 
         train_dataset, test_dataset = get_dataset_simple()
 
-        model.fit(train_dataset, epochs=5, validation_data=test_dataset, steps_per_epoch=1024//batch_size, validation_steps=2)
+        model.fit(train_dataset, epochs=5, steps_per_epoch=1024//batch_size)
 
 if __name__ == "__main__":
     absl_app.run(main)
