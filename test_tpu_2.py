@@ -75,7 +75,7 @@ def main(argv):
 
             train_dataset, test_dataset = get_dataset_simple()
 
-            model.fit(train_dataset, epochs=5, validation_data=test_dataset)
+            model.fit(train_dataset, epochs=5, validation_data=test_dataset, steps_per_epoch=1024//batch_size, validation_steps=2)
     else:
         model = create_model()
         model.compile(optimizer='adam',
