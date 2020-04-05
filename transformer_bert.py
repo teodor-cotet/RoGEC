@@ -13,11 +13,12 @@ import tensorflow as tf
 from absl import app as absl_app
 from bert.tokenization.bert_tokenization import FullTokenizer
 
-from transformer.dataset import construct_datasets_gec, construct_tokenizer_gec
+from transformer.dataset import construct_datasets_gec, construct_tokenizer_gec, prepare_tensors
 from transformer.utils import create_masks, loss_function
 from transformer.transformer_bert import TransformerBert
 from transformer.transformer import Transformer
 from transformer.transformer_scheduler import CustomSchedule
+
 
 # TPU cloud params
 tf.compat.v1.flags.DEFINE_string(
@@ -36,6 +37,7 @@ tf.compat.v1.flags.DEFINE_string(
     "specified, we will attempt to automatically detect the GCE project from "
     "metadata.")
 tf.compat.v1.flags.DEFINE_bool("use_tpu", False, "Use TPUs rather than plain CPUs")
+tf.compat.v1.flags.DEFINE_bool("test", False, "Use TPUs rather than plain CPUs")
 tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from where to load bert')
 
 
@@ -98,61 +100,6 @@ eval_step_signature = [
         tf.TensorSpec(shape=(None, args.d_model), dtype=tf.int64),
         tf.TensorSpec(shape=(None, None), dtype=tf.int64),
     ]
-
-
-@tf.function(input_signature=eval_step_signature)
-def eval_step(inp, inp_seg, tar):
-    global transformer, optimizer, eval_loss, eval_accuracy
-    tar_inp = tar[:, :-1]
-    tar_real = tar[:, 1:]
-
-    enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
-
-    with tf.GradientTape() as tape:
-        if args.bert:
-            predictions, _ = transformer(inp, inp_seg, tar_inp, 
-                                    True, 
-                                    enc_padding_mask, 
-                                    combined_mask, 
-                                    dec_padding_mask)
-        else:
-            predictions, _ = transformer(inp, tar_inp, 
-                                    True, 
-                                    enc_padding_mask, 
-                                    combined_mask, 
-                                    dec_padding_mask)
-        loss = loss_function(tar_real, predictions)
-    eval_loss(loss)
-    eval_accuracy(tar_real, predictions)
-
-@tf.function(input_signature=train_step_signature)
-def train_step(inp, inp_seg, tar):
-    global transformer, optimizer, train_loss, train_accuracy, strategy
-    tar_inp = tar[:, :-1]
-    tar_real = tar[:, 1:]
-
-    enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
-    
-    with tf.GradientTape() as tape:
-        if args.bert is True:
-            predictions, _ = transformer(inp, inp_seg, tar_inp, 
-                                    True, 
-                                    enc_padding_mask, 
-                                    combined_mask, 
-                                    dec_padding_mask)
-        else:
-            predictions, _ = transformer(inp, tar_inp, 
-                                    True, 
-                                    enc_padding_mask, 
-                                    combined_mask, 
-                                    dec_padding_mask)
-        loss = loss_function(tar_real, predictions)
-    gradients = tape.gradient(loss, transformer.trainable_variables)
-
-    optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
-
-    train_loss(loss)
-    train_accuracy(tar_real, predictions)
 
 
 def generate_sentence_gec(inp_sentence: str):
@@ -284,13 +231,73 @@ def get_model_gec():
 
 def train_gec():
     global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy, strategy, checkpoint_path
+
+    @tf.function(input_signature=eval_step_signature)
+    def eval_step(inp, inp_seg, tar):
+        global transformer, optimizer, eval_loss, eval_accuracy
+        tar_inp = tar[:, :-1]
+        tar_real = tar[:, 1:]
+
+        enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
+
+        with tf.GradientTape() as tape:
+            if args.bert:
+                predictions, _ = transformer(inp, inp_seg, tar_inp, 
+                                        True, 
+                                        enc_padding_mask, 
+                                        combined_mask, 
+                                        dec_padding_mask)
+            else:
+                predictions, _ = transformer(inp, tar_inp, 
+                                        True, 
+                                        enc_padding_mask, 
+                                        combined_mask, 
+                                        dec_padding_mask)
+            loss = loss_function(tar_real, predictions)
+        eval_loss(loss)
+        eval_accuracy(tar_real, predictions)
+
+    @tf.function(input_signature=train_step_signature)
+    def train_step(inp, inp_seg, tar):
+        global transformer, optimizer, train_loss, train_accuracy, strategy
+        tar_inp = tar[:, :-1]
+        tar_real = tar[:, 1:]
+
+        enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
+        
+        with tf.GradientTape() as tape:
+            if args.bert is True:
+                predictions, _ = transformer(inp, inp_seg, tar_inp, 
+                                        True, 
+                                        enc_padding_mask, 
+                                        combined_mask, 
+                                        dec_padding_mask)
+            else:
+                predictions, _ = transformer(inp, tar_inp, 
+                                        True, 
+                                        enc_padding_mask, 
+                                        combined_mask, 
+                                        dec_padding_mask)
+            loss = loss_function(tar_real, predictions)
+        gradients = tape.gradient(loss, transformer.trainable_variables)
+
+        optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
+
+        train_loss(loss)
+        train_accuracy(tar_real, predictions)
+
+    @tf.function
+    def distributed_train_step(dataset_inputs):
+        return strategy.run(train_step, args=(dataset_inputs,))
+    
+    @tf.function
+    def distributed_eval_step(dataset_inputs):
+        return strategy.run(eval_step, args=(dataset_inputs,))
+
     with open('run.txt', 'wt') as log:
         
         train_dataset, dev_dataset = construct_datasets_gec(args, subwords_path)
-        # if args.use_tpu:
-        #     train_dataset = strategy.experimental_distribute_dataset(train_dataset)
-        #     dev_dataset = strategy.experimental_distribute_dataset(dev_dataset)
-
+       
         train_loss = tf.keras.metrics.Mean(name='train_loss')
         train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
         eval_loss = tf.keras.metrics.Mean(name='eval_loss')
@@ -331,7 +338,7 @@ def train_gec():
                 inp, tar = tf.squeeze(inp), tf.squeeze(tar)
                 inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
                 if args.use_tpu:
-                    strategy.experimental_run_v2(fn=train_step, args=(inp, inp_seg, tar,))
+                    distributed_train_step([inp, inp_seg, tar])
                 else:
                     train_step(inp, inp_seg, tar)
                 if args.show_batch_stats and batch % 5000 == 0:
@@ -359,7 +366,7 @@ def train_gec():
                 inp, tar = tf.squeeze(inp), tf.squeeze(tar)
                 inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
                 if args.use_tpu:
-                    strategy.experimental_run_v2(fn=eval_step, args=(inp, inp_seg, tar,))
+                   distributed_eval_step([inp, inp_seg, tar])
                 else:
                     eval_step(inp, inp_seg, tar)
                 if args.show_batch_stats and batch % 1000 == 0:
@@ -390,6 +397,7 @@ def test_bert_trans():
     temp_seg = tf.ones((64, 38), dtype=tf.int64)
     temp_target = tf.random.uniform((64, 36), dtype=tf.int64, minval=0, maxval=200)
     enc_padding_mask, combined_mask, dec_padding_mask = create_masks(temp_input, temp_target)
+
     if args.bert is True:
         fn_out, _ = sample_transformer(temp_input, temp_seg, temp_target, training=True, 
                                     enc_padding_mask=enc_padding_mask, 
@@ -402,6 +410,25 @@ def test_bert_trans():
                                     dec_padding_mask=None)
 
     print(fn_out.shape)  # (batch_size, tar_seq_len, target_vocab_size)
+
+def test_transformer_dataset():
+    global args 
+    if args.bert is True:
+        sample_transformer = TransformerBert(num_layers=2, d_model=512, num_heads=8, dff=2048, 
+            input_vocab_size=8500, target_vocab_size=8000, 
+            model_dir=args.bert_model_dir, pe_input=10000, pe_target=6000)
+    else:
+        sample_transformer = Transformer(
+            num_layers=2, d_model=512, num_heads=8, dff=2048, 
+            input_vocab_size=8500, target_vocab_size=8000, 
+            pe_input=10000, pe_target=6000)
+
+    inps = tf.random.uniform((1024, 38), dtype=tf.int64, minval=0, maxval=8500)
+    tars = tf.random.uniform(inps.shape, dtype=tf.int64, minval=0, maxval=8000)
+
+    dataset = tf.data.Dataset.from_tensor_slices((inps, tars))
+    dataset = dataset.batch(args.batch_size, drop_remainder=True)
+    dataset = dataset.map(prepare_tensors)
 
 def run_main():
     if args.train_mode:
@@ -422,9 +449,15 @@ def main(argv):
         strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver)
         print('Running on TPU ', tpu_cluster_resolver.cluster_spec().as_dict()['worker'])
         with strategy.scope():
-            run_main()
+            if args.test:
+                test_bert_trans()
+            else:
+                run_main()
     else:
-       run_main()
+        if args.test:
+            test_bert_trans()
+        else:
+            run_main()
 
 if __name__ == "__main__":
     # tf.disable_v2_behavior()
