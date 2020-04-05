@@ -31,8 +31,8 @@ tf.compat.v1.flags.DEFINE_integer(
 args = tf.compat.v1.flags.FLAGS
 
 def create_model():
-    inp1 = tf.keras.Input(shape=(1024,))
-    inp2 = tf.keras.Input(shape=(1024,))
+    inp1 = tf.keras.Input(shape=(1023,))
+    inp2 = tf.keras.Input(shape=(1023,))
     x = tf.keras.layers.Concatenate()([inp1, inp2])
     x = tf.keras.layers.Dense(1024, activation='relu')(x)
     y = tf.keras.layers.Dense(2)(x)
@@ -58,6 +58,8 @@ def get_dataset(batch_size=200):
 def scale_funct(d1, d2, label):
     d1 /= 2.0
     d2 /= 2.0
+    d1 = d1[1:]
+    d2 = d2[1:]
     return (d1, d2), label
 
 def get_custom_dataset(total_samples, batch_size):
@@ -102,6 +104,8 @@ def get_generator_dataset(total_samples, batch_size):
     train_dataset = train_dataset.repeat(5).batch(batch_size, drop_remainder=True)
     return train_dataset
 
+def get_tfrecord_dataset(total_samples, batch_size):
+    pass
 def main(argv):
     del argv
     global args
