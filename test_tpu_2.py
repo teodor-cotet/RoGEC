@@ -53,8 +53,8 @@ def get_dataset_simple(batch_size=32):
     train_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
     test_dataset = tf.data.Dataset.from_tensor_slices((data[:64], labels[:64]))
 
-    train_dataset = train_dataset.repeat(5).batch(batch_size)
-    test_dataset = test_dataset.repeat(5).batch(batch_size)
+    train_dataset = train_dataset.repeat(5).batch(batch_size).cache()
+    test_dataset = test_dataset.repeat(5).batch(batch_size).cache()
     return train_dataset, test_dataset
 
 def main(argv):
