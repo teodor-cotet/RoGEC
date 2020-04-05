@@ -5,7 +5,7 @@ import tensorflow_datasets as tfds
 from absl import app as absl_app
 
 tf.compat.v1.flags.DEFINE_bool("use_tpu", False, "Use TPUs rather than plain CPUs")
-tf.compat.v1.flags.DEFINE_bool("use_map", False, "")
+tf.compat.v1.flags.DEFINE_bool("use_map", True, "")
 tf.compat.v1.flags.DEFINE_string(
     "tpu", default='teodor-cotet',
     help="The Cloud TPU to use for training. This should be either the name "
@@ -31,11 +31,13 @@ tf.compat.v1.flags.DEFINE_integer(
 args = tf.compat.v1.flags.FLAGS
 
 def create_model():
-  return tf.keras.Sequential(
-      [tf.keras.layers.Conv2D(512, 3, activation='relu', input_shape=(64, 64, 1)),
-       tf.keras.layers.Flatten(),
-       tf.keras.layers.Dense(128, activation='relu'),
-       tf.keras.layers.Dense(10)])
+    inp1 = tf.keras.Input(shape=(1024,))
+    inp2 = tf.keras.Input(shape=(1024,))
+    x = tf.keras.layers.Concatenate()([inp1, inp2])
+    x = tf.keras.layers.Dense(1024, activation='relu')(x)
+    y = tf.keras.layers.Dense(2)(x)
+    model = tf.keras.Model(inputs=[inp1, inp2], outputs=y)
+    return model
 
 def get_dataset(batch_size=200):
   datasets, info = tfds.load(name='mnist', with_info=True, as_supervised=True,
@@ -53,23 +55,30 @@ def get_dataset(batch_size=200):
 
   return train_dataset, test_dataset
 
-def scale_funct(image, label):
-    image /= 2.0
-    return image, label
+def scale_funct(d1, d2, label):
+    d1 /= 2.0
+    d2 /= 2.0
+    return (d1, d2), label
 
 def get_custom_dataset(total_samples, batch_size):
     global args
-    data = np.random.uniform(.0, 2.0, (total_samples, 64, 64, 1))
-    data = tf.convert_to_tensor(data, dtype=tf.float32)
+    data1 = np.random.uniform(.0, 2.0, (total_samples, 1024))
+    data1 = tf.convert_to_tensor(data1, dtype=tf.float32)
 
-    labels = np.random.randint(10, size=(total_samples,))
+    data2 = np.random.uniform(.0, 2.0, (total_samples, 1024))
+    data2 = tf.convert_to_tensor(data2, dtype=tf.float32)
+
+    labels = np.random.randint(2, size=(total_samples,))
     labels = tf.convert_to_tensor(labels, dtype=tf.int32)
 
-    train_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
+    train_dataset = tf.data.Dataset.from_tensor_slices((data1, data2, labels))
+    
+
     if args.use_map:
         train_dataset = train_dataset.map(scale_funct)
     train_dataset = train_dataset.repeat(5).batch(batch_size, drop_remainder=True)
-
+    for x1, x2 in train_dataset.take(1):
+        print(x1[0].shape, x2.shape)
     return train_dataset
 
 
@@ -114,7 +123,7 @@ def main(argv):
         print(model.summary())
         print(model.count_params())
 
-        train_dataset = get_generator_dataset(total_samples, batch_size)
+        train_dataset = get_custom_dataset(total_samples, batch_size)
         model.fit(train_dataset, epochs=5, steps_per_epoch=total_samples//batch_size)
     else:
         model = create_model()
@@ -123,7 +132,7 @@ def main(argv):
                         metrics=['sparse_categorical_accuracy'])
         print(model.summary())
         print(model.count_params())
-        train_dataset = get_generator_dataset(total_samples, batch_size)
+        train_dataset = get_custom_dataset(total_samples, batch_size)
         model.fit(train_dataset, epochs=5, steps_per_epoch=total_samples//batch_size)
 
 if __name__ == "__main__":
