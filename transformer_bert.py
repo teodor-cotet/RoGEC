@@ -297,7 +297,10 @@ def train_gec():
     with open('run.txt', 'wt') as log:
         
         train_dataset, dev_dataset = construct_datasets_gec(args, subwords_path)
-       
+        if args.use_tpu:
+           train_dataset = strategy.experimental_distribute_dataset(train_dataset)
+           dev_dataset = strategy.experimental_distribute_dataset(dev_dataset)
+
         train_loss = tf.keras.metrics.Mean(name='train_loss')
         train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
         eval_loss = tf.keras.metrics.Mean(name='eval_loss')
