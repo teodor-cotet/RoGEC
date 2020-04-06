@@ -451,6 +451,7 @@ def main(argv):
         tf.config.experimental_connect_to_cluster(tpu_cluster_resolver)
         tf.tpu.experimental.initialize_tpu_system(tpu_cluster_resolver)
         strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver)
+        strategy.experimental_enable_dynamic_batch_size = False
         print('Running on TPU ', tpu_cluster_resolver.cluster_spec().as_dict()['worker'])
         with strategy.scope():
             if args.test:
