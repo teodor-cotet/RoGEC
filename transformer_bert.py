@@ -343,6 +343,7 @@ def train_gec():
             eval_accuracy.reset_states()
 
             for batch, data in enumerate(train_dataset):
+                print(data.shape)
                 if args.use_tpu:
                     distributed_train_step(data)
                 else:
