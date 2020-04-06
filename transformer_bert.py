@@ -14,7 +14,7 @@ from absl import app as absl_app
 from bert.tokenization.bert_tokenization import FullTokenizer
 
 from transformer.dataset import construct_datasets_gec, construct_tokenizer_gec, prepare_tensors
-from transformer.utils import create_masks, loss_function
+from transformer.utils import create_masks
 from transformer.transformer_bert import TransformerBert
 from transformer.transformer import Transformer
 from transformer.transformer_scheduler import CustomSchedule
@@ -226,6 +226,19 @@ def get_model_gec():
 
 def train_gec():
     global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy, strategy, checkpoint_path
+
+    def loss_function(real, pred):
+        loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction='none')
+        
+        # mask to compute loss
+        mask = tf.math.logical_not(tf.math.equal(real, 0))
+        loss_ = loss_object(real, pred)
+
+        mask = tf.cast(mask, dtype=loss_.dtype)
+        loss_ *= mask
+        
+        return tf.reduce_mean(loss_)
 
     @tf.function(input_signature=train_step_signature)
     def train_step(data):
