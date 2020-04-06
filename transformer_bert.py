@@ -91,10 +91,10 @@ transformer, optimizer, train_loss, train_accuracy = None, None, None, None
 eval_loss, eval_accuracy = None, None
 strategy = None
 train_step_signature = [
-        tf.TensorSpec(shape=(None, 2, args.d_model), dtype=tf.int64),
+        tf.TensorSpec(shape=(args.batch_size, 2, args.d_model), dtype=tf.int32),
     ]
 eval_step_signature = [
-        tf.TensorSpec(shape=(None, 2, args.d_model), dtype=tf.int64),
+        tf.TensorSpec(shape=(args.batch_size, 2, args.d_model), dtype=tf.int32),
     ]
 
 def generate_sentence_gec(inp_sentence: str):
@@ -227,14 +227,12 @@ def get_model_gec():
 def train_gec():
     global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy, strategy, checkpoint_path
 
-
     @tf.function(input_signature=train_step_signature)
     def train_step(data):
         global transformer, optimizer, train_loss, train_accuracy, strategy
-        print(data.shape)
         inp, tar = tf.split(data, num_or_size_splits=2, axis=1)
         inp, tar = tf.squeeze(inp), tf.squeeze(tar)
-        inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
+        inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int32)
 
         tar_inp = tar[:, :-1]
         tar_real = tar[:, 1:]
