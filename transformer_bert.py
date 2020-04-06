@@ -64,8 +64,8 @@ tf.compat.v1.flags.DEFINE_integer('num_heads', default=8, help='')
 tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
 tf.compat.v1.flags.DEFINE_integer('dict_size', default=(2**15), help='')
 tf.compat.v1.flags.DEFINE_integer('epochs', default=100, help='')
-tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(8*1024*1024), help='')
-tf.compat.v1.flags.DEFINE_integer('batch_size', default=8, help='')
+tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(100), help='')
+tf.compat.v1.flags.DEFINE_integer('batch_size', default=4, help='')
 tf.compat.v1.flags.DEFINE_integer('max_length', default=256, help='')
 tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.9, help='')
 tf.compat.v1.flags.DEFINE_integer('total_samples', default=500, help='')
@@ -233,8 +233,12 @@ def train_gec():
     global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy, strategy, checkpoint_path
 
     # @tf.function(input_signature=eval_step_signature)
-    def eval_step(inp, inp_seg, tar):
+    def eval_step(data):
         global transformer, optimizer, eval_loss, eval_accuracy
+        inp, tar = tf.split(data, num_or_size_splits=2, axis=1)
+        inp, tar = tf.squeeze(inp), tf.squeeze(tar)
+        inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
+
         tar_inp = tar[:, :-1]
         tar_real = tar[:, 1:]
 
@@ -258,8 +262,12 @@ def train_gec():
         eval_accuracy(tar_real, predictions)
 
     # @tf.function(input_signature=train_step_signature)
-    def train_step(inp, inp_seg, tar):
+    def train_step(data):
         global transformer, optimizer, train_loss, train_accuracy, strategy
+        inp, tar = tf.split(data, num_or_size_splits=2, axis=1)
+        inp, tar = tf.squeeze(inp), tf.squeeze(tar)
+        inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
+
         tar_inp = tar[:, :-1]
         tar_real = tar[:, 1:]
 
@@ -338,13 +346,10 @@ def train_gec():
             eval_accuracy.reset_states()
 
             for batch, data in enumerate(train_dataset):
-                inp, tar = tf.split(data, num_or_size_splits=2, axis=1)
-                inp, tar = tf.squeeze(inp), tf.squeeze(tar)
-                inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
                 if args.use_tpu:
-                    distributed_train_step([inp, inp_seg, tar])
+                    distributed_train_step(data)
                 else:
-                    train_step(inp, inp_seg, tar)
+                    train_step(data)
                 if args.show_batch_stats and batch % 5000 == 0:
                     print('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
                         epoch + 1, batch, train_loss.result(), train_accuracy.result()))
@@ -366,13 +371,11 @@ def train_gec():
                                                             train_accuracy.result()))
             log.flush()
             for batch, data in enumerate(dev_dataset):
-                inp, tar = tf.split(data, num_or_size_splits=2, axis=1)
-                inp, tar = tf.squeeze(inp), tf.squeeze(tar)
-                inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
+                
                 if args.use_tpu:
-                   distributed_eval_step([inp, inp_seg, tar])
+                   distributed_eval_step(data)
                 else:
-                    eval_step(inp, inp_seg, tar)
+                    eval_step(data)
                 if args.show_batch_stats and batch % 1000 == 0:
                     print('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
                         epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
