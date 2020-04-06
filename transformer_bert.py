@@ -13,7 +13,8 @@ import tensorflow as tf
 from absl import app as absl_app
 from bert.tokenization.bert_tokenization import FullTokenizer
 
-from transformer.dataset import construct_datasets_gec, construct_tokenizer_gec, prepare_tensors, construct_datatset_mt
+from transformer.dataset import construct_datasets_gec, construct_tokenizer_gec, prepare_tensors, construct_datatset_mt,\
+        construct_datatset_numpy
 from transformer.utils import create_masks
 from transformer.transformer_bert import TransformerBert
 from transformer.transformer import Transformer
@@ -311,7 +312,8 @@ def train_gec():
 
     with open('run.txt', 'wt') as log:
         
-        train_dataset, dev_dataset = construct_datatset_mt(args)
+        train_dataset, dev_dataset = construct_datatset_numpy(args)
+        #train_dataset, dev_dataset = construct_datatset_mt(args)
         if args.use_tpu:
            train_dataset = strategy.experimental_distribute_dataset(train_dataset)
            dev_dataset = strategy.experimental_distribute_dataset(dev_dataset)

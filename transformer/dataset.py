@@ -3,6 +3,7 @@ import os
 from bert.tokenization.bert_tokenization import FullTokenizer
 import tensorflow_datasets as tfds
 from typing import Dict, List, Tuple
+import numpy as np
 from transformer.utils import create_masks
 
 
@@ -45,7 +46,7 @@ def construct_datatset_mt(args):
     examples, metadata = tfds.load('ted_hrlr_translate/pt_to_en', with_info=True,
                                as_supervised=True)
     train_examples, val_examples = examples['train'], examples['validation']
-    
+
     tokenizer_en = tfds.features.text.SubwordTextEncoder.build_from_corpus(
         (en.numpy() for pt, en in train_examples), target_vocab_size=2**13)
 
@@ -73,6 +74,22 @@ def construct_datatset_mt(args):
     val_dataset = (val_preprocessed
                .padded_batch(args.batch_size,  padded_shapes=([None], [None])))
 
+    return train_dataset, val_dataset
+
+
+def construct_datatset_numpy(args):
+    
+    data1 = np.random.randint(100, size=(1024, 128))
+    data1 = tf.convert_to_tensor(data1, dtype=tf.int64)
+
+    data2 = np.random.randint(100, size=(1024, 128))
+    data2 = tf.convert_to_tensor(data2, dtype=tf.int64)
+
+    train_dataset = tf.data.Dataset.from_tensor_slices((data1, data2))
+    val_dataset = tf.data.Dataset.from_tensor_slices((data1, data2))
+
+    train_dataset = train_dataset.repeat(args.epochs).batch(args.batch_size, drop_remainder=True)
+    val_dataset = val_dataset.repeat(args.epochs).batch(args.batch_size, drop_remainder=True)
     return train_dataset, val_dataset
 
 def encode_mt(lang1, lang2):
