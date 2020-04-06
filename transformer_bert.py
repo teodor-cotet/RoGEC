@@ -13,7 +13,7 @@ import tensorflow as tf
 from absl import app as absl_app
 from bert.tokenization.bert_tokenization import FullTokenizer
 
-from transformer.dataset import construct_datasets_gec, construct_tokenizer_gec, prepare_tensors
+from transformer.dataset import construct_datasets_gec, construct_tokenizer_gec, prepare_tensors, construct_datatset_mt
 from transformer.utils import create_masks
 from transformer.transformer_bert import TransformerBert
 from transformer.transformer import Transformer
@@ -91,6 +91,8 @@ transformer, optimizer, train_loss, train_accuracy = None, None, None, None
 eval_loss, eval_accuracy = None, None
 strategy = None
 train_step_signature = [tf.TensorSpec(shape=(None, None, None), dtype=tf.int32)]
+train_step_signature_mt = [tf.TensorSpec(shape=(None, None), dtype=tf.int64),
+tf.TensorSpec(shape=(None, None), dtype=tf.int64)]
 eval_step_signature = train_step_signature
 
 def generate_sentence_gec(inp_sentence: str):
@@ -236,12 +238,12 @@ def train_gec():
         
         return tf.reduce_mean(loss_)
 
-    @tf.function(input_signature=train_step_signature)
-    def train_step(data):
+    @tf.function(input_signature=train_step_signature_mt)
+    def train_step(inp, tar):
         global transformer, optimizer, train_loss, train_accuracy, strategy
-        inp, tar = tf.split(data, num_or_size_splits=2, axis=1)
-        inp, tar = tf.squeeze(inp), tf.squeeze(tar)
-        inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int32)
+        # inp, tar = tf.split(data, num_or_size_splits=2, axis=1)
+        # inp, tar = tf.squeeze(inp), tf.squeeze(tar)
+        # inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int32)
 
         tar_inp = tar[:, :-1]
         tar_real = tar[:, 1:]
@@ -250,11 +252,12 @@ def train_gec():
         
         with tf.GradientTape() as tape:
             if args.bert is True:
-                predictions, _ = transformer(inp, inp_seg, tar_inp, 
-                                        True, 
-                                        enc_padding_mask, 
-                                        combined_mask, 
-                                        dec_padding_mask)
+                pass
+                # predictions, _ = transformer(inp, inp_seg, tar_inp, 
+                #                         True, 
+                #                         enc_padding_mask, 
+                #                         combined_mask, 
+                #                         dec_padding_mask)
             else:
                 predictions, _ = transformer(inp, tar_inp, 
                                         True, 
@@ -299,7 +302,8 @@ def train_gec():
 
     @tf.function
     def distributed_train_step(dataset_inputs):
-        return strategy.experimental_run_v2(train_step, args=(dataset_inputs,))
+        inp, tar = dataset_inputs
+        return strategy.experimental_run_v2(train_step, args=(inp, tar))
     
     @tf.function
     def distributed_eval_step(dataset_inputs):
@@ -307,7 +311,7 @@ def train_gec():
 
     with open('run.txt', 'wt') as log:
         
-        train_dataset, dev_dataset = construct_datasets_gec(args, subwords_path)
+        train_dataset, dev_dataset = construct_datatset_mt(args)
         if args.use_tpu:
            train_dataset = strategy.experimental_distribute_dataset(train_dataset)
            dev_dataset = strategy.experimental_distribute_dataset(dev_dataset)
@@ -342,7 +346,8 @@ def train_gec():
                 if args.use_tpu:
                     distributed_train_step(data)
                 else:
-                    train_step(data)
+                    inp, tar = data
+                    train_step(inp, tar)
                 if args.show_batch_stats and batch % 5000 == 0:
                     print('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
                         epoch + 1, batch, train_loss.result(), train_accuracy.result()))
@@ -363,24 +368,24 @@ def train_gec():
                                                             train_loss.result(), 
                                                             train_accuracy.result()))
             log.flush()
-            for batch, data in enumerate(dev_dataset):
+            # for batch, data in enumerate(dev_dataset):
                 
-                if args.use_tpu:
-                   distributed_eval_step(data)
-                else:
-                    eval_step(data)
-                if args.show_batch_stats and batch % 1000 == 0:
-                    print('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
-                        epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
-                    log.write('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
-                        epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
-                    log.flush()
+            #     if args.use_tpu:
+            #        distributed_eval_step(data)
+            #     else:
+            #         eval_step(data)
+            #     if args.show_batch_stats and batch % 1000 == 0:
+            #         print('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
+            #             epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
+            #         log.write('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
+            #             epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
+            #         log.flush()
                     
-            print('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
-                        epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
-            log.write('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
-                        epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
-            log.flush()
+            # print('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
+            #             epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
+            # log.write('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
+            #             epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
+            # log.flush()
 
 def test_bert_trans():
     if args.bert is True:

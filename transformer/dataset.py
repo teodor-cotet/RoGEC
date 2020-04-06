@@ -5,6 +5,10 @@ import tensorflow_datasets as tfds
 from typing import Dict, List, Tuple
 from transformer.utils import create_masks
 
+
+tokenizer_en, tokenizer_pt = None, None
+MAX_LENGTH = 40
+
 def construct_datasets_gec(args, subwords_path):
 
     if args.bert:
@@ -36,6 +40,58 @@ def construct_datasets_gec(args, subwords_path):
     dev_dataset = dev_dataset.shuffle(args.buffer_size).batch(args.batch_size, drop_remainder=True)
     return train_dataset, dev_dataset
 
+def construct_datatset_mt(args):
+    global tokenizer_pt, tokenizer_en
+    examples, metadata = tfds.load('ted_hrlr_translate/pt_to_en', with_info=True,
+                               as_supervised=True)
+    train_examples, val_examples = examples['train'], examples['validation']
+    
+    tokenizer_en = tfds.features.text.SubwordTextEncoder.build_from_corpus(
+        (en.numpy() for pt, en in train_examples), target_vocab_size=2**13)
+
+    tokenizer_pt = tfds.features.text.SubwordTextEncoder.build_from_corpus(
+        (pt.numpy() for pt, en in train_examples), target_vocab_size=2**13)
+
+    
+    train_preprocessed = (
+        train_examples
+        .map(tf_encode_mt) 
+        .filter(filter_max_length_mt)
+        # cache the dataset to memory to get a speedup while reading from it.
+        .cache()
+        .shuffle(2000))
+
+    val_preprocessed = (
+        val_examples
+        .map(tf_encode_mt)
+        .filter(filter_max_length_mt))
+    
+    train_dataset = (train_preprocessed
+                 .padded_batch(args.batch_size, padded_shapes=([None], [None]))
+                 .prefetch(tf.data.experimental.AUTOTUNE))
+    
+    val_dataset = (val_preprocessed
+               .padded_batch(args.batch_size,  padded_shapes=([None], [None])))
+
+    return train_dataset, val_dataset
+
+def encode_mt(lang1, lang2):
+    global tokenizer_pt, tokenizer_en
+    lang1 = [tokenizer_pt.vocab_size] + tokenizer_pt.encode(
+        lang1.numpy()) + [tokenizer_pt.vocab_size+1]
+
+    lang2 = [tokenizer_en.vocab_size] + tokenizer_en.encode(
+        lang2.numpy()) + [tokenizer_en.vocab_size+1]
+
+    return lang1, lang2
+
+def tf_encode_mt(pt, en):
+  result_pt, result_en = tf.py_function(encode_mt, [pt, en], [tf.int64, tf.int64])
+  result_pt.set_shape([None])
+  result_en.set_shape([None])
+
+  return result_pt, result_en
+
 def prepare_tensors(inp, tar):
     # inp, tar with shape = (seq_length, )
     segs = tf.ones((64, 38), dtype=tf.int64)
@@ -44,6 +100,10 @@ def prepare_tensors(inp, tar):
     enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
 
     return (inp, segs, enc_padding_mask, combined_mask, dec_padding_mask), tar
+
+def filter_max_length_mt(x, y, max_length=MAX_LENGTH):
+  return tf.logical_and(tf.size(x) <= max_length,
+                        tf.size(y) <= max_length)
 
 def make_dsitr(source: List[int], tar: List[int]):
     tar_inp = tar[:, :-1]
