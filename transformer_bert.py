@@ -90,12 +90,8 @@ tokenizer_pt, tokenizer_en, tokenizer_ro, tokenizer_bert = None, None, None, Non
 transformer, optimizer, train_loss, train_accuracy = None, None, None, None
 eval_loss, eval_accuracy = None, None
 strategy = None
-train_step_signature = [
-        tf.TensorSpec(shape=(args.batch_size, 2, args.d_model), dtype=tf.int32),
-    ]
-eval_step_signature = [
-        tf.TensorSpec(shape=(args.batch_size, 2, args.d_model), dtype=tf.int32),
-    ]
+train_step_signature = [tf.TensorSpec(shape=(None, None, None), dtype=tf.int32)]
+eval_step_signature = train_step_signature
 
 def generate_sentence_gec(inp_sentence: str):
     global tokenizer_ro, tokenizer_bert, transformer, optimizer, args, subwords_path, checkpoint_path
@@ -343,6 +339,7 @@ def train_gec():
             eval_accuracy.reset_states()
 
             for batch, data in enumerate(train_dataset):
+                print(data.shape)
                 if args.use_tpu:
                     distributed_train_step(data)
                 else:
@@ -451,7 +448,7 @@ def main(argv):
         tf.config.experimental_connect_to_cluster(tpu_cluster_resolver)
         tf.tpu.experimental.initialize_tpu_system(tpu_cluster_resolver)
         strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver)
-        strategy.experimental_enable_dynamic_batch_size = False
+        # strategy.experimental_enable_dynamic_batch_size = False
         print('Running on TPU ', tpu_cluster_resolver.cluster_spec().as_dict()['worker'])
         with strategy.scope():
             if args.test:
