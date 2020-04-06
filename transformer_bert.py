@@ -254,11 +254,10 @@ def train_gec():
                                         dec_padding_mask)
             loss = loss_function(tar_real, predictions)
         gradients = tape.gradient(loss, transformer.trainable_variables)
-
         optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
 
-        train_loss(loss)
-        train_accuracy(tar_real, predictions)
+        train_loss.update_state(loss)
+        train_accuracy.update_state(tar_real, predictions)
 
     @tf.function(input_signature=eval_step_signature)
     def eval_step(data):
@@ -286,8 +285,8 @@ def train_gec():
                                         combined_mask, 
                                         dec_padding_mask)
             loss = loss_function(tar_real, predictions)
-        eval_loss(loss)
-        eval_accuracy(tar_real, predictions)
+        eval_loss.update_state(loss)
+        eval_accuracy.update_state(tar_real, predictions)
 
     @tf.function
     def distributed_train_step(dataset_inputs):
@@ -321,18 +320,8 @@ def train_gec():
             # loading mechanis matches variables from the tf graph and resotres their values
             ckpt.restore(ckpt_manager.latest_checkpoint)
             print('Latest checkpoint restored!!')
-            # print(optimizer._decayed_lr(tf.float32))
 
-        # train
-        # for batch, data in enumerate(train_dataset.take(2)):
-        #     inp, tar = tf.split(data, num_or_size_splits=2, axis=1)
-        #     inps = tf.split(inp, num_or_size_splits=8, axis=0)
-        #     tars = tf.split(tar, num_or_size_splits=8, axis=0)
-            #inp, tar = tf.squeeze(inp), tf.squeeze(tar)
-            # for i in range(0, 8):
-            #     print(inps[i], tars[i])
         print('starting training...')
-
         for epoch in range(args.epochs):
             start = time.time()
             train_loss.reset_states()
