@@ -22,6 +22,7 @@ def construct_datasets_gec(args, subwords_path):
     gen_dataset = gen_tensors_gec(tokenizer_ro, tokenizer_bert, args)
 
     dataset = list(gen_dataset)
+    dataset = tf.convert_to_tensor(dataset, dtype=tf.int32)
     dataset = tf.data.Dataset.from_tensor_slices(dataset)
     # dataset = tf.data.Dataset.map(prepare_tensors())
 
