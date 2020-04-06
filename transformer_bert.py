@@ -296,11 +296,11 @@ def train_gec():
 
     @tf.function
     def distributed_train_step(dataset_inputs):
-        return strategy.run(train_step, args=(dataset_inputs,))
+        return strategy.experimental_run_v2(train_step, args=(dataset_inputs,))
     
     @tf.function
     def distributed_eval_step(dataset_inputs):
-        return strategy.run(eval_step, args=(dataset_inputs,))
+        return strategy.experimental_run_v2(eval_step, args=(dataset_inputs,))
 
     with open('run.txt', 'wt') as log:
         
