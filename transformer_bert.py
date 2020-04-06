@@ -91,16 +91,11 @@ transformer, optimizer, train_loss, train_accuracy = None, None, None, None
 eval_loss, eval_accuracy = None, None
 strategy = None
 train_step_signature = [
-        tf.TensorSpec(shape=(None, args.d_model), dtype=tf.int64),
-        tf.TensorSpec(shape=(None, args.d_model), dtype=tf.int64),
-        tf.TensorSpec(shape=(None, None), dtype=tf.int64),
+        tf.TensorSpec(shape=(None, 2, args.d_model), dtype=tf.int64),
     ]
 eval_step_signature = [
-        tf.TensorSpec(shape=(None, args.d_model), dtype=tf.int64),
-        tf.TensorSpec(shape=(None, args.d_model), dtype=tf.int64),
-        tf.TensorSpec(shape=(None, None), dtype=tf.int64),
+        tf.TensorSpec(shape=(None, 2, args.d_model), dtype=tf.int64),
     ]
-
 
 def generate_sentence_gec(inp_sentence: str):
     global tokenizer_ro, tokenizer_bert, transformer, optimizer, args, subwords_path, checkpoint_path
@@ -232,38 +227,11 @@ def get_model_gec():
 def train_gec():
     global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy, strategy, checkpoint_path
 
-    # @tf.function(input_signature=eval_step_signature)
-    def eval_step(data):
-        global transformer, optimizer, eval_loss, eval_accuracy
-        inp, tar = tf.split(data, num_or_size_splits=2, axis=1)
-        inp, tar = tf.squeeze(inp), tf.squeeze(tar)
-        inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
 
-        tar_inp = tar[:, :-1]
-        tar_real = tar[:, 1:]
-
-        enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
-
-        with tf.GradientTape() as tape:
-            if args.bert:
-                predictions, _ = transformer(inp, inp_seg, tar_inp, 
-                                        True, 
-                                        enc_padding_mask, 
-                                        combined_mask, 
-                                        dec_padding_mask)
-            else:
-                predictions, _ = transformer(inp, tar_inp, 
-                                        True, 
-                                        enc_padding_mask, 
-                                        combined_mask, 
-                                        dec_padding_mask)
-            loss = loss_function(tar_real, predictions)
-        eval_loss(loss)
-        eval_accuracy(tar_real, predictions)
-
-    # @tf.function(input_signature=train_step_signature)
+    @tf.function(input_signature=train_step_signature)
     def train_step(data):
         global transformer, optimizer, train_loss, train_accuracy, strategy
+        print(data.shape)
         inp, tar = tf.split(data, num_or_size_splits=2, axis=1)
         inp, tar = tf.squeeze(inp), tf.squeeze(tar)
         inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
@@ -293,6 +261,35 @@ def train_gec():
 
         train_loss(loss)
         train_accuracy(tar_real, predictions)
+
+    @tf.function(input_signature=eval_step_signature)
+    def eval_step(data):
+        global transformer, optimizer, eval_loss, eval_accuracy
+        inp, tar = tf.split(data, num_or_size_splits=2, axis=1)
+        inp, tar = tf.squeeze(inp), tf.squeeze(tar)
+        inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
+
+        tar_inp = tar[:, :-1]
+        tar_real = tar[:, 1:]
+
+        enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
+
+        with tf.GradientTape() as tape:
+            if args.bert:
+                predictions, _ = transformer(inp, inp_seg, tar_inp, 
+                                        True, 
+                                        enc_padding_mask, 
+                                        combined_mask, 
+                                        dec_padding_mask)
+            else:
+                predictions, _ = transformer(inp, tar_inp, 
+                                        True, 
+                                        enc_padding_mask, 
+                                        combined_mask, 
+                                        dec_padding_mask)
+            loss = loss_function(tar_real, predictions)
+        eval_loss(loss)
+        eval_accuracy(tar_real, predictions)
 
     @tf.function
     def distributed_train_step(dataset_inputs):
