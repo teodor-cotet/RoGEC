@@ -64,9 +64,9 @@ tf.compat.v1.flags.DEFINE_integer('dff', default=256, help='')
 tf.compat.v1.flags.DEFINE_integer('num_heads', default=8, help='')
 tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
 tf.compat.v1.flags.DEFINE_integer('dict_size', default=(2**15), help='')
-tf.compat.v1.flags.DEFINE_integer('epochs', default=64, help='')
+tf.compat.v1.flags.DEFINE_integer('epochs', default=10, help='')
 tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(100), help='')
-tf.compat.v1.flags.DEFINE_integer('batch_size', default=64, help='')
+tf.compat.v1.flags.DEFINE_integer('batch_size', default=4, help='')
 tf.compat.v1.flags.DEFINE_integer('max_length', default=256, help='')
 tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.9, help='')
 tf.compat.v1.flags.DEFINE_integer('total_samples', default=500, help='')
@@ -92,9 +92,11 @@ transformer, optimizer, train_loss, train_accuracy = None, None, None, None
 eval_loss, eval_accuracy = None, None
 strategy = None
 train_step_signature = [tf.TensorSpec(shape=(None, None, None), dtype=tf.int32)]
+train_step_signature_np = [tf.TensorSpec(shape=(None, None, None), dtype=tf.int64),
+    tf.TensorSpec(shape=(None, None), dtype=tf.int64)]
 train_step_signature_mt = [tf.TensorSpec(shape=(None, None), dtype=tf.int64),
 tf.TensorSpec(shape=(None, None), dtype=tf.int64)]
-eval_step_signature = train_step_signature
+eval_step_signature = train_step_signature_np
 
 def generate_sentence_gec(inp_sentence: str):
     global tokenizer_ro, tokenizer_bert, transformer, optimizer, args, subwords_path, checkpoint_path
@@ -239,26 +241,22 @@ def train_gec():
         
         return tf.reduce_mean(loss_)
 
-    @tf.function(input_signature=train_step_signature_mt)
-    def train_step(inp, tar):
+    @tf.function(input_signature=train_step_signature_np)
+    def train_step(data, inp_segs):
         global transformer, optimizer, train_loss, train_accuracy, strategy
-        # inp, tar = tf.split(data, num_or_size_splits=2, axis=1)
-        # inp, tar = tf.squeeze(inp), tf.squeeze(tar)
-        # inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int32)
-
+        inp, tar = data[:, 0], data[:, 1]
         tar_inp = tar[:, :-1]
         tar_real = tar[:, 1:]
-
         enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
+        # print(inp_segs.shape, inp.shape, tar_inp.shape)
         
         with tf.GradientTape() as tape:
             if args.bert is True:
-                pass
-                # predictions, _ = transformer(inp, inp_seg, tar_inp, 
-                #                         True, 
-                #                         enc_padding_mask, 
-                #                         combined_mask, 
-                #                         dec_padding_mask)
+                predictions, _ = transformer(inp, inp_segs, tar_inp, 
+                                        True, 
+                                        enc_padding_mask, 
+                                        combined_mask, 
+                                        dec_padding_mask)
             else:
                 predictions, _ = transformer(inp, tar_inp, 
                                         True, 
@@ -273,11 +271,9 @@ def train_gec():
         train_accuracy.update_state(tar_real, predictions)
 
     @tf.function(input_signature=eval_step_signature)
-    def eval_step(data):
+    def eval_step(data, inp_segs):
         global transformer, optimizer, eval_loss, eval_accuracy
-        inp, tar = tf.split(data, num_or_size_splits=2, axis=1)
-        inp, tar = tf.squeeze(inp), tf.squeeze(tar)
-        inp_seg = tf.zeros(shape=inp.shape, dtype=tf.dtypes.int64)
+        inp, tar = data[:, 0], data[:, 1]
 
         tar_inp = tar[:, :-1]
         tar_real = tar[:, 1:]
@@ -286,7 +282,7 @@ def train_gec():
 
         with tf.GradientTape() as tape:
             if args.bert:
-                predictions, _ = transformer(inp, inp_seg, tar_inp, 
+                predictions, _ = transformer(inp, inp_segs, tar_inp, 
                                         True, 
                                         enc_padding_mask, 
                                         combined_mask, 
@@ -303,12 +299,13 @@ def train_gec():
 
     @tf.function
     def distributed_train_step(dataset_inputs):
-        inp, tar = dataset_inputs
-        return strategy.experimental_run_v2(train_step, args=(inp, tar))
+        data, segs = dataset_inputs
+        return strategy.experimental_run_v2(train_step, args=(data, segs))
     
     @tf.function
     def distributed_eval_step(dataset_inputs):
-        return strategy.experimental_run_v2(eval_step, args=(dataset_inputs,))
+        data, segs = dataset_inputs
+        return strategy.experimental_run_v2(eval_step, args=(data, segs))
 
     with open('run.txt', 'wt') as log:
         
@@ -349,8 +346,8 @@ def train_gec():
                 if args.use_tpu:
                     distributed_train_step(data)
                 else:
-                    inp, tar = data
-                    train_step(inp, tar)
+                    data, inp_seg = data
+                    train_step(data, inp_seg)
                 if args.show_batch_stats and batch % 1 == 0:
                     print('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
                         epoch + 1, batch, train_loss.result(), train_accuracy.result()))

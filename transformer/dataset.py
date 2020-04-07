@@ -79,14 +79,16 @@ def construct_datatset_mt(args):
 
 def construct_datatset_numpy(args):
     
-    data1 = np.random.randint(100, size=(1024, 128))
-    data1 = tf.convert_to_tensor(data1, dtype=tf.int64)
+    data1 = tf.random.uniform((128, 2, 256), maxval=128, dtype=tf.dtypes.int64)
+    segs = tf.zeros((128, 256), dtype=tf.dtypes.int64)
+    # data1 = np.random.randint(100, size=(1024, 128))
+    #data1 = tf.convert_to_tensor(data1, dtype=tf.int64)
 
-    data2 = np.random.randint(100, size=(1024, 128))
-    data2 = tf.convert_to_tensor(data2, dtype=tf.int64)
+    # data2 = np.random.randint(100, size=(1024, 128))
+    # data2 = tf.convert_to_tensor(data2, dtype=tf.int64)
 
-    train_dataset = tf.data.Dataset.from_tensor_slices((data1, data2))
-    val_dataset = tf.data.Dataset.from_tensor_slices((data1, data2))
+    train_dataset = tf.data.Dataset.from_tensor_slices((data1, segs))
+    val_dataset = tf.data.Dataset.from_tensor_slices((data1, segs))
 
     train_dataset = train_dataset.prefetch(tf.data.experimental.AUTOTUNE)
     val_dataset = val_dataset.prefetch(tf.data.experimental.AUTOTUNE)
