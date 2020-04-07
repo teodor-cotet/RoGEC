@@ -309,7 +309,7 @@ def train_gec():
 
     with open('run.txt', 'wt') as log:
         
-        train_dataset, dev_dataset = construct_datatset_numpy(args)
+        train_dataset, dev_dataset = construct_datasets_gec(args, subwords_path)
         #train_dataset, dev_dataset = construct_datatset_mt(args)
         if args.use_tpu:
            train_dataset = strategy.experimental_distribute_dataset(train_dataset)

@@ -11,7 +11,7 @@ tokenizer_en, tokenizer_pt = None, None
 MAX_LENGTH = 40
 
 def construct_datasets_gec(args, subwords_path):
-
+    tokenizer_bert = None
     if args.bert:
         tokenizer_bert = FullTokenizer(vocab_file=args.bert_model_dir + "vocab.vocab")
         tokenizer_bert.vocab_size = len(tokenizer_bert.vocab)
@@ -27,8 +27,10 @@ def construct_datasets_gec(args, subwords_path):
     gen_dataset = gen_tensors_gec(tokenizer_ro, tokenizer_bert, args)
 
     dataset = list(gen_dataset)
-    dataset = tf.convert_to_tensor(dataset, dtype=tf.int32)
-    dataset = tf.data.Dataset.from_tensor_slices(dataset)
+    nr_samples = len(dataset)
+    dataset = tf.convert_to_tensor(dataset, dtype=tf.int64)
+    segs = tf.zeros((nr_samples, args.seq_length), dtype=tf.dtypes.int64)
+    dataset = tf.data.Dataset.from_tensor_slices((dataset, segs))
     # dataset = tf.data.Dataset.map(prepare_tensors())
 
     train_dataset = dataset.take(sample_train)
