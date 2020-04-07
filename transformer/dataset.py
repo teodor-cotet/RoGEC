@@ -81,8 +81,8 @@ def construct_datatset_mt(args):
 
 def construct_datatset_numpy(args):
     
-    data1 = tf.random.uniform((128, 2, 256), maxval=128, dtype=tf.dtypes.int64)
-    segs = tf.zeros((128, 256), dtype=tf.dtypes.int64)
+    data1 = tf.random.uniform((15000, 2, 256), maxval=128, dtype=tf.dtypes.int64)
+    segs = tf.zeros((15000, 256), dtype=tf.dtypes.int64)
     # data1 = np.random.randint(100, size=(1024, 128))
     #data1 = tf.convert_to_tensor(data1, dtype=tf.int64)
 
