@@ -42,8 +42,8 @@ tf.compat.v1.flags.DEFINE_bool("test", False, "Use TPUs rather than plain CPUs")
 tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from where to load bert')
 
 
-# paths for model  1k_clean_dirty_better.txt
-tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/1k_clean_dirty_better.txt', help='')
+# paths for model  1k_clean_dirty_better.txt 30k_clean_dirty_better.txt
+tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/30k_clean_dirty_better.txt', help='')
 tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_test',
                 help='Checpoint save locations, or restore')
 # tf.compat.v1.flags.DEFINE_string('subwords', default='checkpoints/transformer_test/corpora', help='')
@@ -66,10 +66,10 @@ tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
 tf.compat.v1.flags.DEFINE_integer('dict_size', default=(2**15), help='')
 tf.compat.v1.flags.DEFINE_integer('epochs', default=10, help='')
 tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(100), help='')
-tf.compat.v1.flags.DEFINE_integer('batch_size', default=4, help='')
+tf.compat.v1.flags.DEFINE_integer('batch_size', default=1024, help='')
 tf.compat.v1.flags.DEFINE_integer('max_length', default=256, help='')
 tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.9, help='')
-tf.compat.v1.flags.DEFINE_integer('total_samples', default=500, help='')
+tf.compat.v1.flags.DEFINE_integer('total_samples', default=15000, help='')
 tf.compat.v1.flags.DEFINE_bool('show_batch_stats', default=True, help='do prediction, decoding')
 
 # for prediction purposes only
