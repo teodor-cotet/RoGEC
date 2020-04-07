@@ -368,6 +368,7 @@ def train_gec():
                                                             train_loss.result(), 
                                                             train_accuracy.result()))
             log.flush()
+            # eval
             # for batch, data in enumerate(dev_dataset):
                 
             #     if args.use_tpu:
@@ -454,6 +455,7 @@ def main(argv):
         strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver)
         # strategy.experimental_enable_dynamic_batch_size = False
         print('Running on TPU ', tpu_cluster_resolver.cluster_spec().as_dict()['worker'])
+        print("Tpu replicas in sync: ", strategy.num_replicas_in_sync)
         with strategy.scope():
             if args.test:
                 test_bert_trans()
