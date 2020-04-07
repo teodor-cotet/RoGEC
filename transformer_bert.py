@@ -64,9 +64,9 @@ tf.compat.v1.flags.DEFINE_integer('dff', default=256, help='')
 tf.compat.v1.flags.DEFINE_integer('num_heads', default=8, help='')
 tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
 tf.compat.v1.flags.DEFINE_integer('dict_size', default=(2**15), help='')
-tf.compat.v1.flags.DEFINE_integer('epochs', default=100, help='')
+tf.compat.v1.flags.DEFINE_integer('epochs', default=64, help='')
 tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(100), help='')
-tf.compat.v1.flags.DEFINE_integer('batch_size', default=4, help='')
+tf.compat.v1.flags.DEFINE_integer('batch_size', default=64, help='')
 tf.compat.v1.flags.DEFINE_integer('max_length', default=256, help='')
 tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.9, help='')
 tf.compat.v1.flags.DEFINE_integer('total_samples', default=500, help='')
@@ -345,12 +345,13 @@ def train_gec():
             eval_accuracy.reset_states()
 
             for batch, data in enumerate(train_dataset):
+                
                 if args.use_tpu:
                     distributed_train_step(data)
                 else:
                     inp, tar = data
                     train_step(inp, tar)
-                if args.show_batch_stats and batch % 5000 == 0:
+                if args.show_batch_stats and batch % 1 == 0:
                     print('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
                         epoch + 1, batch, train_loss.result(), train_accuracy.result()))
                     log.write('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(

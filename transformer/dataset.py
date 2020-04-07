@@ -88,8 +88,11 @@ def construct_datatset_numpy(args):
     train_dataset = tf.data.Dataset.from_tensor_slices((data1, data2))
     val_dataset = tf.data.Dataset.from_tensor_slices((data1, data2))
 
-    train_dataset = train_dataset.repeat(args.epochs).batch(args.batch_size, drop_remainder=True)
-    val_dataset = val_dataset.repeat(args.epochs).batch(args.batch_size, drop_remainder=True)
+    train_dataset = train_dataset.prefetch(tf.data.experimental.AUTOTUNE)
+    val_dataset = val_dataset.prefetch(tf.data.experimental.AUTOTUNE)
+
+    train_dataset = train_dataset.batch(args.batch_size, drop_remainder=True)
+    val_dataset = val_dataset.batch(args.batch_size, drop_remainder=True)
     return train_dataset, val_dataset
 
 def encode_mt(lang1, lang2):
