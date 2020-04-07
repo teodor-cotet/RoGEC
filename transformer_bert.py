@@ -230,7 +230,7 @@ def train_gec():
 
     def loss_function(real, pred):
         loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True, reduction='none')
+            from_logits=True)
         
         # mask to compute loss
         mask = tf.math.logical_not(tf.math.equal(real, 0))
@@ -239,7 +239,7 @@ def train_gec():
         mask = tf.cast(mask, dtype=loss_.dtype)
         loss_ *= mask
         
-        return tf.reduce_mean(loss_)
+        return loss_
 
     @tf.function(input_signature=train_step_signature_np)
     def train_step(data, inp_segs):
