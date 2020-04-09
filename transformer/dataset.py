@@ -1,91 +1,69 @@
 import tensorflow as tf
 import os
+from shutil import copyfile
 from bert.tokenization.bert_tokenization import FullTokenizer
 import tensorflow_datasets as tfds
 from typing import Dict, List, Tuple
 import numpy as np
 from transformer.utils import create_masks
 from transformer.serialization import example_encode_text_dataset, get_text_dataset_tf_records
-
+from transformer.serialization import serialize_ids_dataset
 
 args, tokenizer_ro, tokenizer_bert = None, None, None
 
-def construct_datasets_gec(args, subwords_path):
-    tokenizer_bert = None
+def construct_flat_datasets(args, subwords_path):
+    global tokenizer_bert, tokenizer_ro
     if args.bert:
         tokenizer_bert = FullTokenizer(vocab_file=args.bert_model_dir + "vocab.vocab")
         tokenizer_bert.vocab_size = len(tokenizer_bert.vocab)
 
-    examples = get_text_examples_gec(args)
+    samples = get_text_samples(args)
 
     if os.path.isfile(subwords_path + '.subwords'): 
         tokenizer_ro  = construct_tokenizer(None, subwords_path, args)
     else:
-        tokenizer_ro = construct_tokenizer(list(examples), subwords_path, args)
+        tokenizer_ro = construct_tokenizer(list(samples), subwords_path, args)
 
     sample_train = int(args.total_samples * args.train_dev_split)
-    gen_dataset = gen_tensors_gec(tokenizer_ro, tokenizer_bert, args)
+    gen_dataset = generator_tensors_ids(tokenizer_ro, tokenizer_bert, args)
 
     dataset = list(gen_dataset)
     nr_samples = len(dataset)
     dataset = tf.convert_to_tensor(dataset, dtype=tf.int64)
     segs = tf.zeros((nr_samples, args.seq_length), dtype=tf.dtypes.int64)
     dataset = tf.data.Dataset.from_tensor_slices((dataset, segs))
-    # dataset = tf.data.Dataset.map(prepare_tensors())
 
     train_dataset = dataset.take(sample_train)
-    # train_dataset = train_dataset.cache()
+    dev_dataset = dataset.skip(sample_train)
+
+    return train_dataset, dev_dataset
+
+def construct_datasets_gec(args, subwords_path):
+    train_dataset, dev_dataset = construct_flat_datasets(args, subwords_path)
+
     train_dataset = train_dataset.shuffle(args.buffer_size).batch(args.batch_size, drop_remainder=True)
     train_dataset = train_dataset.prefetch(tf.data.experimental.AUTOTUNE) # how many batches to prefectch
-    # train_dataset = train_dataset.prefetch(1)
 
-    dev_dataset = dataset.skip(sample_train)
     dev_dataset = dev_dataset.shuffle(args.buffer_size).batch(args.batch_size, drop_remainder=True)
     return train_dataset, dev_dataset
 
-def construct_dataset_tf_records(args1, subwords_path):
-    """this should work only with tf records files"""
-    global tokenizer_bert, tokenizer_ro, args
-    args = args1
+def construct_tf_records(args1, subwords_path=None):
+    """given a txt constructs tf records files + subwords dictionary"""
+    global tokenizer_bert, tokenizer_ro
+    train_dataset, dev_dataset = construct_flat_datasets(args1, subwords_path)
 
-    tokenizer_bert = None
-    if args.bert:
-        tokenizer_bert = FullTokenizer(vocab_file=args.bert_model_dir + "vocab.vocab")
-        tokenizer_bert.vocab_size = len(tokenizer_bert.vocab)
+    if not os.path.exists(args1.tf_records):
+        os.makedirs(args1.tf_records)
+    tokenizer_ro_path = os.path.join(args1.tf_records, 'tokenizer_ro')
+    tokenizer_bert_path = os.path.join(args1.tf_records, 'tokenizer_bert.vocab')
 
-    dataset = get_text_dataset_tf_records(args)
-    examples = [(s.numpy(), t.numpy()) for s, t in dataset]
-
-    if os.path.isfile(subwords_path + '.subwords'): 
-        tokenizer_ro = construct_tokenizer(None, subwords_path, args)
-    else:
-        tokenizer_ro = construct_tokenizer(examples, subwords_path, args)
-
-    dataset = get_text_dataset_tf_records(args)
-    dataset = dataset.map(lambda t1, t2: tf.py_function(func=encode_tf_records,
-        inp=[t1, t2], Tout=(tf.int64, tf.int64)))
-    return dataset
-
-def encode_tf_records(t1, t2):
-    global args, tokenizer_ro, tokenizer_bert
+    tokenizer_ro.save_to_file(tokenizer_ro_path)
+    vocab_file_source = args1.bert_model_dir + "vocab.vocab"
+    copyfile(vocab_file_source, tokenizer_bert_path)
     
-    source, target = t1.numpy(), t2.numpy()
-    if args.bert:
-        tokens = ['[CLS]']
-        tokens.extend(tokenizer_bert.tokenize(source))
-        tokens.append('[SEP]')
-        source = tokenizer_bert.convert_tokens_to_ids(tokens)
-       
-    else:
-        source = [tokenizer_ro.vocab_size] + tokenizer_ro.encode(source) +\
-            [tokenizer_ro.vocab_size + 1]
-    target = [tokenizer_ro.vocab_size] + tokenizer_ro.encode(target) +\
-            [tokenizer_ro.vocab_size + 1]
-    
-    source = make_fixed_length(source, args.seq_length)
-    target = make_fixed_length(target, args.seq_length)
-    return tf.convert_to_tensor(source, dtype=tf.in64),\
-          tf.convert_to_tensor(target, dtype=tf.in64)
+    # todo save bert tokenizer
+    serialize_ids_dataset(train_dataset, args1, 'train.tfrecord')
+    serialize_ids_dataset(dev_dataset, args1, 'dev.tfrecord')
 
 def test_map_numpy(tensor1, tensor2):
     global args
@@ -139,7 +117,7 @@ def make_dsitr(source: List[int], tar: List[int]):
     tar_real = tar[:, 1:]
     enc_padding_mask, combined_mask, dec_padding_mask = create_masks(source, tar_inp)
 
-def gec_generator(tokenizer_ro, tokenizer_bert, args):
+def generator_ids(tokenizer_ro, tokenizer_bert, args):
 
     with open(args.dataset_file, 'r', encoding='utf-8', errors='replace') as f:
         for i, line in enumerate(f):
@@ -191,13 +169,13 @@ def encode_gec(source: str, target: str, tokenizer_ro, tokenizer_bert, args):
   
     return source, target
 
-def gen_tensors_gec(tokenizer_ro, tokenizer_bert, args):
-    gen = gec_generator(tokenizer_ro, tokenizer_bert, args)
+def generator_tensors_ids(tokenizer_ro, tokenizer_bert, args):
+    gen = generator_ids(tokenizer_ro, tokenizer_bert, args)
     for s, t in gen:
         yield (tf.convert_to_tensor(s, dtype=tf.int64), 
                 tf.convert_to_tensor(t, dtype=tf.int64))
 
-def get_text_examples_gec(args) -> List[str]:
+def get_text_samples(args) -> List[str]:
     gen = gec_generator_text(args)
     return gen
 

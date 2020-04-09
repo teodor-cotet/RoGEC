@@ -2,6 +2,9 @@ import tensorflow as tf
 import numpy as np
 from os import listdir
 from os.path import isfile, join
+import os
+from bert.tokenization.bert_tokenization import FullTokenizer
+import tensorflow_datasets as tfds
 
 def _bytes_feature(value):
     """Returns a bytes_list from a string / byte."""
@@ -51,7 +54,27 @@ def serialize_example_text(s, t):
     example_proto = tf.train.Example(features=tf.train.Features(feature=feature))
     return example_proto.SerializeToString()
 
+def serialize_example_ids(sentences, seg):
+    """
+    Creates a tf.Example message ready to be written to a file.
+    """
+    # Create a dictionary mapping the feature name to the tf.Example-compatible
+    # data type.
+    feature = {
+        'sentences': _tensor_feature(sentences),
+        'seg': _tensor_feature(seg),
+    }
 
+    # Create a Features message using tf.train.Example.
+    example_proto = tf.train.Example(features=tf.train.Features(feature=feature))
+    return example_proto.SerializeToString()
+
+def tf_serialize_example_ids(sentences, seg):
+    tf_string = tf.py_function(
+        serialize_example_ids,
+        (sentences, seg),  # pass these args to the above function.
+        tf.string)      # the return type is `tf.string`.
+    return tf.reshape(tf_string, ()) # The result is a scalar
 
 def tf_serialize_example(data, seg):
     tf_string = tf.py_function(
@@ -75,8 +98,7 @@ def example_encode_tensor():
     print(segs)
     y = tf.io.parse_tensor(segs, out_type=tf.int32) # byte string -> tensor 
     print(y)
-
-    
+  
 def example_encode_text():
 
     s = "asdqăđșßâ".encode('utf-8')
@@ -96,7 +118,6 @@ def generator_text():
         t = 'asda'.encode('utf-8')
         yield serialize_example_text(s, t)
 
-
 def parse_example(example):
     feature_description = {
         'source': tf.io.VarLenFeature(tf.string), # or tf.fixedLen
@@ -104,6 +125,22 @@ def parse_example(example):
     }
     y = tf.io.parse_single_example(example, feature_description) # get the tensor
     return (tf.sparse.to_dense(y['source'])[0], tf.sparse.to_dense(y['target'])[0])
+
+def parse_example_ids(example):
+    # todo
+    feature_description = {
+        'sentences': tf.io.FixedLenFeature((), tf.string), # or tf.fixedLen
+        'seg': tf.io.FixedLenFeature((), tf.string)
+    }
+    parsed_example = tf.io.parse_single_example(example, feature_description) # get the tensor
+
+    seg = parsed_example['seg']
+    seg = tf.io.parse_tensor(seg, out_type=tf.int64)
+
+    sentences = parsed_example['sentences']
+    sentences = tf.io.parse_tensor(sentences, out_type=tf.int64)
+
+    return sentences, seg
 
 def example_encode_text_dataset(args, filename='test.tfrecord'):
     serialized_features_dataset = tf.data.Dataset.from_generator(
@@ -121,12 +158,42 @@ def example_encode_text_dataset(args, filename='test.tfrecord'):
         #print(x[0].numpy()[0].decode('utf-8'), x[1].numpy()[0].decode('utf-8'))
     return dataset
 
+def serialize_ids_dataset(dataset, args, filename='train.tfrecord'):
+    tf_records_path = os.path.join(args.tf_records, filename)
+    serialized_dataset = dataset.map(tf_serialize_example_ids)
+    writer = tf.data.experimental.TFRecordWriter(tf_records_path)
+    writer.write(serialized_dataset)
+
+def get_ids_dataset_tf_records(args):
+    
+    # get dataset
+    path_tf_records = args.tf_records
+    tf_records_files = [join(path_tf_records, f) for f in listdir(path_tf_records) \
+            if isfile(join(path_tf_records, f)) and f.endswith('.tfrecord')]
+    raw_dataset = tf.data.TFRecordDataset(tf_records_files)
+    dataset = raw_dataset.map(parse_example_ids)
+    # get ro tokenizer
+    tokenizer_ro_path = [join(path_tf_records, f) for f in listdir(path_tf_records) \
+            if isfile(join(path_tf_records, f)) and f.endswith('.subwords')][0]
+    tokenizer_ro_path = tokenizer_ro_path.replace('.subwords', '')
+    tokenizer_ro = tfds.features.text.SubwordTextEncoder.load_from_file(tokenizer_ro_path)
+    
+    tokenizer_bert = None
+    if args.bert:
+        tokenizer_bert_path = [join(path_tf_records, f) for f in listdir(path_tf_records) \
+                if isfile(join(path_tf_records, f)) and f.endswith('.vocab')][0]
+        tokenizer_bert = FullTokenizer(vocab_file=tokenizer_bert_path)
+        tokenizer_bert.vocab_size = len(tokenizer_bert.vocab)
+
+    return dataset, tokenizer_ro, tokenizer_bert 
+
 def get_text_dataset_tf_records(path_tf_records):
     tf_records_files = [join(path_tf_records, f) for f in listdir(path_tf_records) \
             if isfile(join(path_tf_records, f)) and f.endswith('.tfrecord')]
     
     raw_dataset = tf.data.TFRecordDataset(tf_records_files)
     dataset = raw_dataset.map(parse_example)
+
     return dataset
 
 if __name__ == "__main__":
