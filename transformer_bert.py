@@ -312,6 +312,8 @@ def train_gec():
         
         # train_dataset, dev_dataset = construct_datasets_gec(args, subwords_path)
         train_dataset, dev_dataset = construct_datatset_numpy(args)
+        for x, y in train_dataset.take(10):
+            print(x.shape, y.shape)
         #train_dataset, dev_dataset = construct_datatset_mt(args)
         if args.use_tpu:
            train_dataset = strategy.experimental_distribute_dataset(train_dataset)
