@@ -109,10 +109,10 @@ def construct_datatset_numpy(args1):
     train_dataset = tf.data.Dataset.from_tensor_slices((data1, segs))
     val_dataset = tf.data.Dataset.from_tensor_slices((data1, segs))
     
-    train_dataset = train_dataset.map(lambda t1, t2: tf.py_function(func=test_map_numpy,
-        inp=[t1, t2], Tout=(tf.int64, tf.int64)))
-    val_dataset = val_dataset.map(lambda t1, t2: tf.py_function(func=test_map_numpy,
-        inp=[t1, t2], Tout=(tf.int64, tf.int64)))
+    # train_dataset = train_dataset.map(lambda t1, t2: tf.py_function(func=test_map_numpy,
+    #     inp=[t1, t2], Tout=(tf.int64, tf.int64)))
+    # val_dataset = val_dataset.map(lambda t1, t2: tf.py_function(func=test_map_numpy,
+    #     inp=[t1, t2], Tout=(tf.int64, tf.int64)))
 
     train_dataset = train_dataset.prefetch(tf.data.experimental.AUTOTUNE)
     val_dataset = val_dataset.prefetch(tf.data.experimental.AUTOTUNE)
