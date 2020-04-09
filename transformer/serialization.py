@@ -1,0 +1,155 @@
+import tensorflow as tf
+import numpy as np
+from os import listdir
+from os.path import isfile, join
+
+def _bytes_feature(value):
+    """Returns a bytes_list from a string / byte."""
+    if isinstance(value, type(tf.constant(0))):
+        value = value.numpy() # BytesList won't unpack a string from an EagerTensor.
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+
+def _float_feature(value):
+    """Returns a float_list from a float / double."""
+    return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
+
+def _int64_feature(value):
+    """Returns an int64_list from a bool / enum / int / uint."""
+    return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
+
+def _tensor_feature(value):
+    """converts a tensor to serialized byte string"""
+    return  _bytes_feature(tf.io.serialize_tensor(value))
+
+def serialize_example(data, seg):
+    """
+    Creates a tf.Example message ready to be written to a file.
+    """
+    # Create a dictionary mapping the feature name to the tf.Example-compatible
+    # data type.
+    feature = {
+        'data': _tensor_feature(data),
+        'segs': _tensor_feature(seg),
+    }
+
+    # Create a Features message using tf.train.Example.
+    example_proto = tf.train.Example(features=tf.train.Features(feature=feature))
+    return example_proto.SerializeToString()
+
+def serialize_example_text(s, t):
+    """
+    Creates a tf.Example message ready to be written to a file.
+    """
+    # Create a dictionary mapping the feature name to the tf.Example-compatible
+    # data type.
+    feature = {
+        'source': _bytes_feature(s),
+        'target': _bytes_feature(t),
+    }
+
+    # Create a Features message using tf.train.Example.
+    example_proto = tf.train.Example(features=tf.train.Features(feature=feature))
+    return example_proto.SerializeToString()
+
+
+
+def tf_serialize_example(data, seg):
+    tf_string = tf.py_function(
+        serialize_example,
+        (data, seg),  # pass these args to the above function.
+        tf.string)      # the return type is `tf.string`.
+    return tf.reshape(tf_string, ()) # The result is a scalar
+
+def example_encode_tensor():
+    x = np.random.randint(0, high=128, size=(4, 2, 8))
+    xx = np.random.randint(0, high=128, size=(4, 8))
+    x = tf.convert_to_tensor(x, dtype=tf.int32)
+    xx = tf.convert_to_tensor(xx, dtype=tf.int32)
+
+    serialized_example = serialize_example(x, xx) # tensor ->  byte string -> tf.feature -> tf example -> serialized string
+    example_proto = tf.train.Example.FromString(serialized_example) # serialized string -> tf example 
+    print(example_proto)
+    feature = example_proto.features.feature # tf example -> tf feature
+    print(feature)
+    segs = feature['segs'].bytes_list.value[0] # tf feature -> byte string (serialized 2) 
+    print(segs)
+    y = tf.io.parse_tensor(segs, out_type=tf.int32) # byte string -> tensor 
+    print(y)
+
+    
+def example_encode_text():
+
+    s = "asdqăđșßâ".encode('utf-8')
+    t = "ăđßr€rțhy".encode('utf-8')
+
+    serialized_example = serialize_example_text(s, t) # text ->  -> tf.feature -> tf example -> serialized string
+    example_proto = tf.train.Example.FromString(serialized_example) # serialized string -> tf example 
+    print(example_proto)
+    feature = example_proto.features.feature # tf example -> tf feature
+    print(feature)
+    source = feature['source'].bytes_list.value[0] # tf feature -> text
+    print(source.decode('utf-8'))
+
+def generator_text():
+    for _ in range(1024):
+        s = 'asda'.encode('utf-8')
+        t = 'asda'.encode('utf-8')
+        yield serialize_example_text(s, t)
+
+
+def parse_example(example):
+    feature_description = {
+        'source': tf.io.VarLenFeature(tf.string), # or tf.fixedLen
+        'target': tf.io.VarLenFeature(tf.string)
+    }
+
+    y = tf.io.parse_single_example(example, feature_description) # get the tensor
+    return (tf.sparse.to_dense(y['source'])[0], tf.sparse.to_dense(y['target'])[0])
+
+def example_encode_text_dataset(args, filename='test.tfrecord'):
+    serialized_features_dataset = tf.data.Dataset.from_generator(
+        generator_text, output_types=tf.string, output_shapes=())
+    # write the dataset to a file
+    writer = tf.data.experimental.TFRecordWriter(filename)
+    writer.write(serialized_features_dataset)
+    # read from tf record file
+    filenames = [filename]
+    raw_dataset = tf.data.TFRecordDataset(filenames)
+    # for x in raw_dataset.take(5):
+    #     print(x)
+    dataset = raw_dataset.map(parse_example)
+
+        #print(x[0].numpy()[0].decode('utf-8'), x[1].numpy()[0].decode('utf-8'))
+    return dataset
+
+def get_text_dataset_tf_records(path_tf_records):
+    tf_records_files = [join(path_tf_records, f) for f in listdir(path_tf_records) \
+            if isfile(join(path_tf_records, f)) and f.endswith('.tfrecord')]
+    
+    raw_dataset = tf.data.TFRecordDataset(tf_records_files)
+    dataset = raw_dataset.map(parse_example)
+    return dataset
+
+if __name__ == "__main__":
+   
+
+    # example_encode_text()
+    # example_encode_text_dataset(None)
+    dataset = get_text_dataset_tf_records('./corpora/tf_records/test/')
+    # for x, y in dataset:
+    #     print(x)
+    examples = [(s.numpy(), t.numpy()) for s, t in dataset]
+    # for x, y in examples:
+    #     print(x)
+    # x = np.random.randint(0, high=128, size=(4, 2, 8))
+    # xx = np.random.randint(high=128, size=(4, 8))
+
+    # y = _tensor_feature(x)
+    # print(y)
+    # z = tf.train.BytesList(value=[y.numpy()])
+    # print('bytes list:', tf.train.BytesList(value=[y.numpy()]))
+    # print('tf train feature: ', tf.train.Feature(bytes_list=z))
+    # x = tf.io.parse_tensor(y, out_type=tf.dtypes.int32)
+    # print(_bytes_feature(b'test_string'))
+    # print(_bytes_feature(u'test_bytes'.encode('utf-8')))
+    

@@ -5,10 +5,10 @@ import tensorflow_datasets as tfds
 from typing import Dict, List, Tuple
 import numpy as np
 from transformer.utils import create_masks
+from transformer.serialization import example_encode_text_dataset, get_text_dataset_tf_records
 
 
-tokenizer_en, tokenizer_pt = None, None
-MAX_LENGTH = 40
+args, tokenizer_ro, tokenizer_bert = None, None, None
 
 def construct_datasets_gec(args, subwords_path):
     tokenizer_bert = None
@@ -19,9 +19,9 @@ def construct_datasets_gec(args, subwords_path):
     examples = get_text_examples_gec(args)
 
     if os.path.isfile(subwords_path + '.subwords'): 
-        tokenizer_ro  = construct_tokenizer_gec(None, subwords_path, args)
+        tokenizer_ro  = construct_tokenizer(None, subwords_path, args)
     else:
-        tokenizer_ro = construct_tokenizer_gec(list(examples), subwords_path, args)
+        tokenizer_ro = construct_tokenizer(list(examples), subwords_path, args)
 
     sample_train = int(args.total_samples * args.train_dev_split)
     gen_dataset = gen_tensors_gec(tokenizer_ro, tokenizer_bert, args)
@@ -43,41 +43,55 @@ def construct_datasets_gec(args, subwords_path):
     dev_dataset = dev_dataset.shuffle(args.buffer_size).batch(args.batch_size, drop_remainder=True)
     return train_dataset, dev_dataset
 
-def construct_datatset_mt(args):
-    global tokenizer_pt, tokenizer_en
-    examples, metadata = tfds.load('ted_hrlr_translate/pt_to_en', with_info=True,
-                               as_supervised=True)
-    train_examples, val_examples = examples['train'], examples['validation']
+def construct_dataset_tf_records(args1, subwords_path):
+    """this should work only with tf records files"""
+    global tokenizer_bert, tokenizer_ro, args
+    args = args1
 
-    tokenizer_en = tfds.features.text.SubwordTextEncoder.build_from_corpus(
-        (en.numpy() for pt, en in train_examples), target_vocab_size=2**13)
+    tokenizer_bert = None
+    if args.bert:
+        tokenizer_bert = FullTokenizer(vocab_file=args.bert_model_dir + "vocab.vocab")
+        tokenizer_bert.vocab_size = len(tokenizer_bert.vocab)
 
-    tokenizer_pt = tfds.features.text.SubwordTextEncoder.build_from_corpus(
-        (pt.numpy() for pt, en in train_examples), target_vocab_size=2**13)
+    dataset = get_text_dataset_tf_records(args)
+    examples = [(s.numpy(), t.numpy()) for s, t in dataset]
 
+    if os.path.isfile(subwords_path + '.subwords'): 
+        tokenizer_ro = construct_tokenizer(None, subwords_path, args)
+    else:
+        tokenizer_ro = construct_tokenizer(examples, subwords_path, args)
+
+    dataset = get_text_dataset_tf_records(args)
+    dataset = dataset.map(lambda t1, t2: tf.py_function(func=encode_tf_records,
+        inp=[t1, t2], Tout=(tf.int64, tf.int64)))
+    return dataset
+
+def encode_tf_records(t1, t2):
+    global args, tokenizer_ro, tokenizer_bert
     
-    train_preprocessed = (
-        train_examples
-        .map(tf_encode_mt) 
-        .filter(filter_max_length_mt)
-        # cache the dataset to memory to get a speedup while reading from it.
-        .cache()
-        .shuffle(2000))
-
-    val_preprocessed = (
-        val_examples
-        .map(tf_encode_mt)
-        .filter(filter_max_length_mt))
+    source, target = t1.numpy(), t2.numpy()
+    if args.bert:
+        tokens = ['[CLS]']
+        tokens.extend(tokenizer_bert.tokenize(source))
+        tokens.append('[SEP]')
+        source = tokenizer_bert.convert_tokens_to_ids(tokens)
+       
+    else:
+        source = [tokenizer_ro.vocab_size] + tokenizer_ro.encode(source) +\
+            [tokenizer_ro.vocab_size + 1]
+    target = [tokenizer_ro.vocab_size] + tokenizer_ro.encode(target) +\
+            [tokenizer_ro.vocab_size + 1]
     
-    train_dataset = (train_preprocessed
-                 .padded_batch(args.batch_size, padded_shapes=([None], [None]))
-                 .prefetch(tf.data.experimental.AUTOTUNE))
-    
-    val_dataset = (val_preprocessed
-               .padded_batch(args.batch_size,  padded_shapes=([None], [None])))
+    source = make_fixed_length(source, args.seq_length)
+    target = make_fixed_length(target, args.seq_length)
+    return tf.convert_to_tensor(source, dtype=tf.in64),\
+          tf.convert_to_tensor(target, dtype=tf.in64)
 
-    return train_dataset, val_dataset
 
+def test_map_numpy(tensor1, tensor2):
+    tensor1 = tensor1.numpy()
+    tensor1 *= 2 
+    return tf.convert_to_tensor(tensor1, dtype=tf.int64), tensor2
 
 def construct_datatset_numpy(args):
     
@@ -91,6 +105,11 @@ def construct_datatset_numpy(args):
 
     train_dataset = tf.data.Dataset.from_tensor_slices((data1, segs))
     val_dataset = tf.data.Dataset.from_tensor_slices((data1, segs))
+    
+    train_dataset = train_dataset.map(lambda t1, t2: tf.py_function(func=test_map_numpy,
+        inp=[t1, t2], Tout=(tf.int64, tf.int64)))
+    val_dataset = val_dataset.map(lambda t1, t2: tf.py_function(func=test_map_numpy,
+        inp=[t1, t2], Tout=(tf.int64, tf.int64)))
 
     train_dataset = train_dataset.prefetch(tf.data.experimental.AUTOTUNE)
     val_dataset = val_dataset.prefetch(tf.data.experimental.AUTOTUNE)
@@ -98,23 +117,6 @@ def construct_datatset_numpy(args):
     train_dataset = train_dataset.batch(args.batch_size, drop_remainder=True)
     val_dataset = val_dataset.batch(args.batch_size, drop_remainder=True)
     return train_dataset, val_dataset
-
-def encode_mt(lang1, lang2):
-    global tokenizer_pt, tokenizer_en
-    lang1 = [tokenizer_pt.vocab_size] + tokenizer_pt.encode(
-        lang1.numpy()) + [tokenizer_pt.vocab_size+1]
-
-    lang2 = [tokenizer_en.vocab_size] + tokenizer_en.encode(
-        lang2.numpy()) + [tokenizer_en.vocab_size+1]
-
-    return lang1, lang2
-
-def tf_encode_mt(pt, en):
-  result_pt, result_en = tf.py_function(encode_mt, [pt, en], [tf.int64, tf.int64])
-  result_pt.set_shape([None])
-  result_en.set_shape([None])
-
-  return result_pt, result_en
 
 def prepare_tensors(inp, tar):
     # inp, tar with shape = (seq_length, )
@@ -124,10 +126,6 @@ def prepare_tensors(inp, tar):
     enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
 
     return (inp, segs, enc_padding_mask, combined_mask, dec_padding_mask), tar
-
-def filter_max_length_mt(x, y, max_length=MAX_LENGTH):
-  return tf.logical_and(tf.size(x) <= max_length,
-                        tf.size(y) <= max_length)
 
 def make_dsitr(source: List[int], tar: List[int]):
     tar_inp = tar[:, :-1]
@@ -196,7 +194,7 @@ def get_text_examples_gec(args) -> List[str]:
     gen = gec_generator_text(args)
     return gen
 
-def construct_tokenizer_gec(examples: List, subwords_path, args):
+def construct_tokenizer(examples: List, subwords_path, args):
 
     if examples is None:
         tokenizer_ro = tfds.features.text.SubwordTextEncoder.load_from_file(subwords_path)
@@ -216,3 +214,4 @@ def construct_tokenizer_gec(examples: List, subwords_path, args):
     tokenizer_ro.save_to_file(subwords_path)
 
     return tokenizer_ro
+

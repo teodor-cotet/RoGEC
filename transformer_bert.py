@@ -13,7 +13,7 @@ import tensorflow as tf
 from absl import app as absl_app
 from bert.tokenization.bert_tokenization import FullTokenizer
 
-from transformer.dataset import construct_datasets_gec, construct_tokenizer_gec, prepare_tensors, construct_datatset_mt,\
+from transformer.dataset import construct_datasets_gec, construct_tokenizer, prepare_tensors,\
         construct_datatset_numpy
 from transformer.utils import create_masks
 from transformer.transformer_bert import TransformerBert
@@ -48,6 +48,7 @@ tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_
                 help='Checpoint save locations, or restore')
 # tf.compat.v1.flags.DEFINE_string('subwords', default='checkpoints/transformer_test/corpora', help='')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='./bert/ro0/', help='path from where to load bert')
+tf.compat.v1.flags.DEFINE_string('tf_records', default='./corpora/tf_records/test/', help='path to tf records folder')
 
 # mode of execution
 """if bert is used, the decoder is still a transofrmer with transformer specific tokenization"""
@@ -66,7 +67,7 @@ tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
 tf.compat.v1.flags.DEFINE_integer('dict_size', default=(2**15), help='')
 tf.compat.v1.flags.DEFINE_integer('epochs', default=10, help='')
 tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(100), help='')
-tf.compat.v1.flags.DEFINE_integer('batch_size', default=1024, help='')
+tf.compat.v1.flags.DEFINE_integer('batch_size', default=32, help='')
 tf.compat.v1.flags.DEFINE_integer('max_length', default=256, help='')
 tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.9, help='')
 tf.compat.v1.flags.DEFINE_integer('total_samples', default=15000, help='')
@@ -103,7 +104,7 @@ def generate_sentence_gec(inp_sentence: str):
 
     if tokenizer_ro is None:
         if os.path.isfile(subwords_path + '.subwords'):
-            tokenizer_ro = construct_tokenizer_gec(None, subwords_path, args)
+            tokenizer_ro = construct_tokenizer(None, subwords_path, args)
             print('subwords restored')
         else:
             print('no subwords file, aborted')
