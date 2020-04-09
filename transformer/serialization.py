@@ -102,7 +102,6 @@ def parse_example(example):
         'source': tf.io.VarLenFeature(tf.string), # or tf.fixedLen
         'target': tf.io.VarLenFeature(tf.string)
     }
-
     y = tf.io.parse_single_example(example, feature_description) # get the tensor
     return (tf.sparse.to_dense(y['source'])[0], tf.sparse.to_dense(y['target'])[0])
 
@@ -132,7 +131,6 @@ def get_text_dataset_tf_records(path_tf_records):
 
 if __name__ == "__main__":
    
-
     # example_encode_text()
     # example_encode_text_dataset(None)
     dataset = get_text_dataset_tf_records('./corpora/tf_records/test/')

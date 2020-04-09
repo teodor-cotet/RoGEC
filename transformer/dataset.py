@@ -87,14 +87,17 @@ def encode_tf_records(t1, t2):
     return tf.convert_to_tensor(source, dtype=tf.in64),\
           tf.convert_to_tensor(target, dtype=tf.in64)
 
-
 def test_map_numpy(tensor1, tensor2):
+    global args
     tensor1 = tensor1.numpy()
     tensor1 *= 2 
-    return tf.convert_to_tensor(tensor1, dtype=tf.int64), tensor2
+    t1 = tf.convert_to_tensor(tensor1, dtype=tf.int64)
+    tensor1 = tf.reshape(t1, shape=(2, 256))
+    return tensor1, tensor2
 
-def construct_datatset_numpy(args):
-    
+def construct_datatset_numpy(args1):
+    global args
+    args = args1
     data1 = tf.random.uniform((15000, 2, 256), maxval=128, dtype=tf.dtypes.int64)
     segs = tf.zeros((15000, 256), dtype=tf.dtypes.int64)
     # data1 = np.random.randint(100, size=(1024, 128))
@@ -116,6 +119,9 @@ def construct_datatset_numpy(args):
 
     train_dataset = train_dataset.batch(args.batch_size, drop_remainder=True)
     val_dataset = val_dataset.batch(args.batch_size, drop_remainder=True)
+
+    # for x, y in train_dataset.take(2):
+    #     print(x.shape)
     return train_dataset, val_dataset
 
 def prepare_tensors(inp, tar):
@@ -214,4 +220,3 @@ def construct_tokenizer(examples: List, subwords_path, args):
     tokenizer_ro.save_to_file(subwords_path)
 
     return tokenizer_ro
-
