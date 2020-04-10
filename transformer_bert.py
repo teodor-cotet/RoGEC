@@ -14,11 +14,12 @@ from absl import app as absl_app
 from bert.tokenization.bert_tokenization import FullTokenizer
 
 from transformer.dataset import construct_datasets_gec, construct_tokenizer, prepare_tensors,\
-        construct_datatset_numpy
+        construct_datatset_numpy, prepare_datasets, construct_tf_records
 from transformer.utils import create_masks
 from transformer.transformer_bert import TransformerBert
 from transformer.transformer import Transformer
 from transformer.transformer_scheduler import CustomSchedule
+from transformer.serialization import get_ids_dataset_tf_records
 
 
 # TPU cloud params
@@ -53,6 +54,7 @@ tf.compat.v1.flags.DEFINE_string('tf_records', default='./corpora/tf_records/tes
 # mode of execution
 """if bert is used, the decoder is still a transofrmer with transformer specific tokenization"""
 tf.compat.v1.flags.DEFINE_bool('bert', default=False, help='use bert as encoder or transformer')
+tf.compat.v1.flags.DEFINE_bool('records', default=False, help='use datasets from tf records (must provide tf_records)')
 tf.compat.v1.flags.DEFINE_bool('train_mode', default=False, help='do training')
 tf.compat.v1.flags.DEFINE_bool('decode_mode',default=False, help='do prediction, decoding')
 
@@ -224,6 +226,7 @@ def get_model_gec():
                             pe_input=vocab_size, 
                             pe_target=vocab_size,
                             rate=args.dropout)
+    tf.compat.v1.logging.info('transformer model constructed')
     return transformer, optimizer
 
 def train_gec():
@@ -311,10 +314,18 @@ def train_gec():
     with open('run.txt', 'wt') as log:
         
         # train_dataset, dev_dataset = construct_datasets_gec(args, subwords_path)
-        train_dataset, dev_dataset = construct_datatset_numpy(args)
-        for x, y in train_dataset.take(10):
-            print(x.shape, y.shape)
-        #train_dataset, dev_dataset = construct_datatset_mt(args)
+        # train_dataset, dev_dataset = construct_datatset_numpy(args)
+        # construct_tf_records(args, subwords_path)
+        if args.records:
+            construct_tf_records(args, subwords_path)
+        train_dataset, dev_dataset, _, _= get_ids_dataset_tf_records(args)
+        train_dataset, dev_dataset = prepare_datasets(train_dataset, dev_dataset, args)
+
+        prepare_datasets(train_dataset, dev_dataset, args)
+
+        for x, y in train_dataset.take(1):
+            tf.compat.v1.logging.info('input shapes: {}, {}'.format(x.shape, y.shape))
+
         if args.use_tpu:
            train_dataset = strategy.experimental_distribute_dataset(train_dataset)
            dev_dataset = strategy.experimental_distribute_dataset(dev_dataset)
@@ -335,9 +346,9 @@ def train_gec():
         if ckpt_manager.latest_checkpoint:
             # loading mechanis matches variables from the tf graph and resotres their values
             ckpt.restore(ckpt_manager.latest_checkpoint)
-            print('Latest checkpoint restored!!')
+            tf.compat.v1.logging.info('latest checkpoint restored {}'.format(checkpoint_path))
 
-        print('starting training...')
+        tf.compat.v1.logging.info('starting training...')
         for epoch in range(args.epochs):
             start = time.time()
             train_loss.reset_states()

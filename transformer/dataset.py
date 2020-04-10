@@ -40,7 +40,9 @@ def construct_flat_datasets(args, subwords_path):
 
 def construct_datasets_gec(args, subwords_path):
     train_dataset, dev_dataset = construct_flat_datasets(args, subwords_path)
-
+    return prepare_datasets(train_dataset, dev_dataset)
+   
+def prepare_datasets(train_dataset, dev_dataset, args):
     train_dataset = train_dataset.shuffle(args.buffer_size).batch(args.batch_size, drop_remainder=True)
     train_dataset = train_dataset.prefetch(tf.data.experimental.AUTOTUNE) # how many batches to prefectch
 
@@ -50,6 +52,7 @@ def construct_datasets_gec(args, subwords_path):
 def construct_tf_records(args1, subwords_path=None):
     """given a txt constructs tf records files + subwords dictionary"""
     global tokenizer_bert, tokenizer_ro
+    tf.compat.v1.logging.info('constructing tf records files and vocabularies in {}'.format(args1.tf_records))
     train_dataset, dev_dataset = construct_flat_datasets(args1, subwords_path)
 
     if not os.path.exists(args1.tf_records):
@@ -59,11 +62,13 @@ def construct_tf_records(args1, subwords_path=None):
 
     tokenizer_ro.save_to_file(tokenizer_ro_path)
     vocab_file_source = args1.bert_model_dir + "vocab.vocab"
-    copyfile(vocab_file_source, tokenizer_bert_path)
+    if args1.bert:
+        copyfile(vocab_file_source, tokenizer_bert_path)
     
     # todo save bert tokenizer
     serialize_ids_dataset(train_dataset, args1, 'train.tfrecord')
     serialize_ids_dataset(dev_dataset, args1, 'dev.tfrecord')
+    tf.compat.v1.logging.info('tf records files and vocabularies constructed in {}'.format(args1.tf_records))
 
 def test_map_numpy(tensor1, tensor2):
     global args

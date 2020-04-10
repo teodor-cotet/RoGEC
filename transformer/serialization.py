@@ -165,27 +165,53 @@ def serialize_ids_dataset(dataset, args, filename='train.tfrecord'):
     writer.write(serialized_dataset)
 
 def get_ids_dataset_tf_records(args):
-    
+    tf.compat.v1.logging.info('restoring datasets from {}'.format(args.tf_records))
     # get dataset
     path_tf_records = args.tf_records
     tf_records_files = [join(path_tf_records, f) for f in listdir(path_tf_records) \
             if isfile(join(path_tf_records, f)) and f.endswith('.tfrecord')]
-    raw_dataset = tf.data.TFRecordDataset(tf_records_files)
-    dataset = raw_dataset.map(parse_example_ids)
+    try:
+        train_tf_record_file = [f for f in tf_records_files if f.endswith('train.tfrecord')][0]
+    except Exception as e:
+        tf.compat.v1.logging.error('No train.tfrecords file in {}'.format(path_tf_records))
+        raise e
+
+    try:
+        dev_tf_record_file = [f for f in tf_records_files if f.endswith('dev.tfrecord')][0]
+    except Exception as e:
+        tf.compat.v1.logging.error('No dev.tfrecords file in {}'.format(path_tf_records))
+        raise e
+
+    raw_train_dataset = tf.data.TFRecordDataset(train_tf_record_file)
+    train_dataset = raw_train_dataset.map(parse_example_ids)
+
+    raw_dev_dataset = tf.data.TFRecordDataset(dev_tf_record_file)
+    dev_dataset = raw_dev_dataset.map(parse_example_ids)
     # get ro tokenizer
-    tokenizer_ro_path = [join(path_tf_records, f) for f in listdir(path_tf_records) \
-            if isfile(join(path_tf_records, f)) and f.endswith('.subwords')][0]
+    try:
+        tokenizer_ro_path = [join(path_tf_records, f) for f in listdir(path_tf_records) \
+                if isfile(join(path_tf_records, f)) and f.endswith('.subwords')][0]
+    except Exception as e:
+        tf.compat.v1.logging.error('No subwords file in {} for ro tokenizer'.format(path_tf_records))
+        raise e
+
     tokenizer_ro_path = tokenizer_ro_path.replace('.subwords', '')
     tokenizer_ro = tfds.features.text.SubwordTextEncoder.load_from_file(tokenizer_ro_path)
     
     tokenizer_bert = None
     if args.bert:
-        tokenizer_bert_path = [join(path_tf_records, f) for f in listdir(path_tf_records) \
-                if isfile(join(path_tf_records, f)) and f.endswith('.vocab')][0]
+        try:
+            tokenizer_bert_path = [join(path_tf_records, f) for f in listdir(path_tf_records) \
+                    if isfile(join(path_tf_records, f)) and f.endswith('.vocab')][0]
+        except Exception as e:
+            tf.compat.v1.logging.error('No vocab file in {} for bert tokenizer'.format(path_tf_records))
+            raise e
+
         tokenizer_bert = FullTokenizer(vocab_file=tokenizer_bert_path)
         tokenizer_bert.vocab_size = len(tokenizer_bert.vocab)
-
-    return dataset, tokenizer_ro, tokenizer_bert 
+        
+    tf.compat.v1.logging.info('datasets restored')
+    return train_dataset, dev_dataset, tokenizer_ro, tokenizer_bert 
 
 def get_text_dataset_tf_records(path_tf_records):
     tf_records_files = [join(path_tf_records, f) for f in listdir(path_tf_records) \
