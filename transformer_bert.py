@@ -316,8 +316,6 @@ def train_gec():
         # train_dataset, dev_dataset = construct_datasets_gec(args, subwords_path)
         # train_dataset, dev_dataset = construct_datatset_numpy(args)
         # construct_tf_records(args, subwords_path)
-        if args.records:
-            construct_tf_records(args, subwords_path)
         train_dataset, dev_dataset, _, _= get_ids_dataset_tf_records(args)
         train_dataset, dev_dataset = prepare_datasets(train_dataset, dev_dataset, args)
 
@@ -452,12 +450,14 @@ def test_transformer_dataset():
     dataset = dataset.map(prepare_tensors)
 
 def run_main():
+    if args.records:
+        construct_tf_records(args, subwords_path)
     if args.train_mode:
         # test_bert_trans()
         train_gec()
     if args.decode_mode:
         correct_from_file(in_file=args.in_file_decode, out_file=args.out_file_decode)
-
+    
 def main(argv):
     del argv
     global args, strategy
