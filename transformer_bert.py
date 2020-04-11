@@ -311,7 +311,7 @@ def train_gec():
         data, segs = dataset_inputs
         return strategy.experimental_run_v2(eval_step, args=(data, segs))
 
-    with open('run.txt', 'wt') as log:
+    with open('info.log', 'wt') as log:
         
         # train_dataset, dev_dataset = construct_datasets_gec(args, subwords_path)
         # train_dataset, dev_dataset = construct_datatset_numpy(args)
@@ -469,8 +469,8 @@ def main(argv):
         tf.tpu.experimental.initialize_tpu_system(tpu_cluster_resolver)
         strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver)
         # strategy.experimental_enable_dynamic_batch_size = False
-        print('Running on TPU ', tpu_cluster_resolver.cluster_spec().as_dict()['worker'])
-        print("Tpu replicas in sync: ", strategy.num_replicas_in_sync)
+        tf.compat.v1.logging.info('Running on TPU {}'.format(tpu_cluster_resolver.cluster_spec().as_dict()['worker']))
+        tf.compat.v1.logging.info("Tpu replicas in sync: {}".format(strategy.num_replicas_in_sync))
         with strategy.scope():
             if args.test:
                 test_bert_trans()
