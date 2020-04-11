@@ -5,6 +5,7 @@ from os.path import isfile, join
 import os
 from bert.tokenization.bert_tokenization import FullTokenizer
 import tensorflow_datasets as tfds
+args = None
 
 def _bytes_feature(value):
     """Returns a bytes_list from a string / byte."""
@@ -127,6 +128,7 @@ def parse_example(example):
     return (tf.sparse.to_dense(y['source'])[0], tf.sparse.to_dense(y['target'])[0])
 
 def parse_example_ids(example):
+    global args 
     # todo
     feature_description = {
         'sentences': tf.io.FixedLenFeature((), tf.string), # or tf.fixedLen
@@ -136,10 +138,11 @@ def parse_example_ids(example):
 
     seg = parsed_example['seg']
     seg = tf.io.parse_tensor(seg, out_type=tf.int64)
+    seg = tf.reshape(seg, shape=(args.seq_length, ))
 
     sentences = parsed_example['sentences']
     sentences = tf.io.parse_tensor(sentences, out_type=tf.int64)
-
+    sentences = tf.reshape(sentences, shape=(2, args.seq_length))
     return sentences, seg
 
 def example_encode_text_dataset(args, filename='test.tfrecord'):
@@ -164,7 +167,9 @@ def serialize_ids_dataset(dataset, args, filename='train.tfrecord'):
     writer = tf.data.experimental.TFRecordWriter(tf_records_path)
     writer.write(serialized_dataset)
 
-def get_ids_dataset_tf_records(args):
+def get_ids_dataset_tf_records(args1):
+    global args
+    args = args1
     # get dataset
     path_tf_records = args.tf_records
     if args.use_tpu:
@@ -176,12 +181,12 @@ def get_ids_dataset_tf_records(args):
     tf.compat.v1.logging.info('restoring tf records from {} {}'.format(train_tf_record_file, dev_tf_record_file))
 
     raw_train_dataset = tf.data.TFRecordDataset(train_tf_record_file)
-    train_dataset = raw_train_dataset
-    #train_dataset = raw_train_dataset.map(parse_example_ids)
+    #train_dataset = raw_train_dataset
+    train_dataset = raw_train_dataset.map(parse_example_ids)
 
     raw_dev_dataset = tf.data.TFRecordDataset(dev_tf_record_file)
-    dev_dataset = raw_dev_dataset
-    # dev_dataset = raw_dev_dataset.map(parse_example_ids)
+    # dev_dataset = raw_dev_dataset
+    dev_dataset = raw_dev_dataset.map(parse_example_ids)
     # get tokenizers (transformer + bert)
     tokenizer_ro_path = join(path_tf_records, 'tokenizer_ro')
     tokenizer_ro = tfds.features.text.SubwordTextEncoder.load_from_file(tokenizer_ro_path)
