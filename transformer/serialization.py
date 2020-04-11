@@ -173,7 +173,7 @@ def get_ids_dataset_tf_records(args):
     train_tf_record_file = join(path_tf_records, 'train.tfrecord')
     dev_tf_record_file = join(path_tf_records, 'dev.tfrecord')
 
-    tf.compat.v1.logging('restoring tf records from {} {}'.format(train_tf_record_file, dev_tf_record_file))
+    tf.compat.v1.logging.info('restoring tf records from {} {}'.format(train_tf_record_file, dev_tf_record_file))
 
     raw_train_dataset = tf.data.TFRecordDataset(train_tf_record_file)
     train_dataset = raw_train_dataset.map(parse_example_ids)
@@ -183,14 +183,14 @@ def get_ids_dataset_tf_records(args):
     # get tokenizers (transformer + bert)
     tokenizer_ro_path = join(path_tf_records, 'tokenizer_ro')
     tokenizer_ro = tfds.features.text.SubwordTextEncoder.load_from_file(tokenizer_ro_path)
-    tf.compat.v1.logging('restoring ro tokenizer from {}'.format(tokenizer_ro_path))
+    tf.compat.v1.logging.info('restoring ro tokenizer from {}'.format(tokenizer_ro_path))
 
     tokenizer_bert = None
     if args.bert:
         tokenizer_bert_path = join(path_tf_records, 'corpora.subwords')
         tokenizer_bert = FullTokenizer(vocab_file=tokenizer_bert_path)
         tokenizer_bert.vocab_size = len(tokenizer_bert.vocab)
-        tf.compat.v1.logging('restoring bert tokenizer from {}'.format(tokenizer_bert_path))
+        tf.compat.v1.logging.info('restoring bert tokenizer from {}'.format(tokenizer_bert_path))
 
     tf.compat.v1.logging.info('datasets restored')
     return train_dataset, dev_dataset, tokenizer_ro, tokenizer_bert 
