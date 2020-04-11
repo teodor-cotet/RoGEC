@@ -19,7 +19,7 @@ from transformer.utils import create_masks
 from transformer.transformer_bert import TransformerBert
 from transformer.transformer import Transformer
 from transformer.transformer_scheduler import CustomSchedule
-from transformer.serialization import get_ids_dataset_tf_records
+from transformer.serialization import get_ids_dataset_tf_records, get_tokenizers_tf_records
 
 
 # TPU cloud params
@@ -105,18 +105,8 @@ eval_step_signature = train_step_signature_np
 def generate_sentence_gec(inp_sentence: str):
     global tokenizer_ro, tokenizer_bert, transformer, optimizer, args, subwords_path, checkpoint_path
 
-    if tokenizer_ro is None:
-        if os.path.isfile(subwords_path + '.subwords'):
-            tokenizer_ro = construct_tokenizer(None, subwords_path, args)
-            print('subwords restored')
-        else:
-            print('no subwords file, aborted')
-            return
-
-    if args.bert:
-        if tokenizer_bert is None:
-            tokenizer_bert = FullTokenizer(vocab_file=args.bert_model_dir + "vocab.vocab")
-            tokenizer_bert.vocab_size = len(tokenizer_bert.vocab)
+    if tokenizer_ro is None or (args.bert and tokenizer_bert is None):
+        tokenizer_ro, tokenizer_bert = get_tokenizers_tf_records(args)
 
     if transformer is None:
         transformer, optimizer = get_model_gec()
@@ -130,7 +120,7 @@ def generate_sentence_gec(inp_sentence: str):
             # loading mechanis matches variables from the tf graph and resotres their values
             ckpt.restore(ckpt_manager.latest_checkpoint)
         else:
-            print('No checkpoints for transformers. Aborting')
+            tf.compat.v1.error('no checkpoints for transformers. Aborting')
             return None
     if args.bert:
         start_token = ['[CLS]']
@@ -189,7 +179,7 @@ def correct_from_file(in_file: str, out_file: str):
             predicted_sentences = correct_gec(line)
             print(line)
             print(predicted_sentences)
-            #fout.write(line)
+
             if args.use_tpu == False:
                 fout.write(predicted_sentences + '\n')
                 fout.flush()
@@ -199,8 +189,6 @@ def correct_gec(sentence: str, plot=''):
     result, attention_weights = generate_sentence_gec(sentence)
     predicted_sentence = tokenizer_ro.decode([i for i in result 
                                                 if i < tokenizer_ro.vocab_size])  
-    # print('Input: {}'.format(sentence))
-    # print('Predicted sentence: {}'.format(predicted_sentence))
     
     return predicted_sentence
      
@@ -279,10 +267,8 @@ def train_gec():
     def eval_step(data, inp_segs):
         global transformer, optimizer, eval_loss, eval_accuracy
         inp, tar = data[:, 0], data[:, 1]
-
         tar_inp = tar[:, :-1]
         tar_real = tar[:, 1:]
-
         enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
 
         with tf.GradientTape() as tape:
@@ -316,13 +302,11 @@ def train_gec():
         
         # train_dataset, dev_dataset = construct_datasets_gec(args, subwords_path)
         # train_dataset, dev_dataset = construct_datatset_numpy(args)
-        # construct_tf_records(args, subwords_path)
-        train_dataset, dev_dataset, _, _= get_ids_dataset_tf_records(args)
+        train_dataset, dev_dataset, = get_ids_dataset_tf_records(args)
         train_dataset, dev_dataset = prepare_datasets(train_dataset, dev_dataset, args)
 
         for sents, seg in train_dataset.take(1):
             tf.compat.v1.logging.info('input shapes: {} {}'.format(sents.shape, seg.shape))
-            # tf.compat.v1.logging.info('input shapes: {}, {}'.format(x.shape, y.shape))
 
         if args.use_tpu:
            train_dataset = strategy.experimental_distribute_dataset(train_dataset)
@@ -336,7 +320,8 @@ def train_gec():
         transformer, optimizer = get_model_gec()
         # object you want to checkpoint are saved as attributes of the checkpoint obj
         if args.bert:
-            ckpt = tf.train.Checkpoint(decoder=transformer.decoder, final_layer=transformer.final_layer, optimizer=optimizer)
+            ckpt = tf.train.Checkpoint(decoder=transformer.decoder, 
+                                        final_layer=transformer.final_layer, optimizer=optimizer)
         else:
             ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
        
@@ -361,14 +346,14 @@ def train_gec():
                 else:
                     data, inp_seg = data
                     train_step(data, inp_seg)
-                if args.show_batch_stats and batch % 1 == 0:
+                if args.show_batch_stats and batch % 1000 == 0:
                     print('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
                         epoch + 1, batch, train_loss.result(), train_accuracy.result()))
                     log.write('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
                         epoch + 1, batch, train_loss.result(), train_accuracy.result()))
                     log.flush()
 
-            if (epoch + 1) % 5 == 0:
+            if (epoch + 1) % 2 == 0:
                 ckpt_save_path = ckpt_manager.save()
                 log.write('Saving checkpoint for epoch {} at {} \n'.format(epoch+1,
                                                                     ckpt_save_path))
@@ -382,24 +367,26 @@ def train_gec():
                                                             train_accuracy.result()))
             log.flush()
             # eval
-            # for batch, data in enumerate(dev_dataset):
+            for batch, data in enumerate(dev_dataset):
                 
-            #     if args.use_tpu:
-            #        distributed_eval_step(data)
-            #     else:
-            #         eval_step(data)
-            #     if args.show_batch_stats and batch % 1000 == 0:
-            #         print('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
-            #             epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
-            #         log.write('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
-            #             epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
-            #         log.flush()
+                if args.use_tpu:
+                   distributed_eval_step(data)
+                else:
+                    data, inp_seg = data
+                    eval_step(data, inp_seg)
+
+                if args.show_batch_stats and batch % 1000 == 0:
+                    print('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
+                        epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
+                    log.write('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
+                        epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
+                    log.flush()
                     
-            # print('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
-            #             epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
-            # log.write('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
-            #             epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
-            # log.flush()
+            print('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
+                        epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
+            log.write('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
+                        epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
+            log.flush()
 
 def test_bert_trans():
     if args.bert is True:

@@ -181,13 +181,21 @@ def get_ids_dataset_tf_records(args1):
     tf.compat.v1.logging.info('restoring tf records from {} {}'.format(train_tf_record_file, dev_tf_record_file))
 
     raw_train_dataset = tf.data.TFRecordDataset(train_tf_record_file)
-    #train_dataset = raw_train_dataset
     train_dataset = raw_train_dataset.map(parse_example_ids)
 
     raw_dev_dataset = tf.data.TFRecordDataset(dev_tf_record_file)
-    # dev_dataset = raw_dev_dataset
     dev_dataset = raw_dev_dataset.map(parse_example_ids)
+    return train_dataset, dev_dataset
+
+def get_tokenizers_tf_records(args1):
+    global args
+    args = args1
+    
     # get tokenizers (transformer + bert)
+    path_tf_records = args.tf_records
+    if args.use_tpu:
+        path_tf_records = 'gs://' + args.bucket + '/' + path_tf_records
+
     tokenizer_ro_path = join(path_tf_records, 'tokenizer_ro')
     tokenizer_ro = tfds.features.text.SubwordTextEncoder.load_from_file(tokenizer_ro_path)
     tf.compat.v1.logging.info('restoring ro tokenizer from {}'.format(tokenizer_ro_path))
@@ -200,7 +208,8 @@ def get_ids_dataset_tf_records(args1):
         tf.compat.v1.logging.info('restoring bert tokenizer from {}'.format(tokenizer_bert_path))
 
     tf.compat.v1.logging.info('datasets restored')
-    return train_dataset, dev_dataset, tokenizer_ro, tokenizer_bert 
+    return tokenizer_ro, tokenizer_bert 
+
 
 def get_text_dataset_tf_records(path_tf_records):
     tf_records_files = [join(path_tf_records, f) for f in listdir(path_tf_records) \
