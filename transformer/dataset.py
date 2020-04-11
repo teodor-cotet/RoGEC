@@ -11,8 +11,10 @@ from transformer.serialization import serialize_ids_dataset
 
 args, tokenizer_ro, tokenizer_bert = None, None, None
 
-def construct_flat_datasets(args, subwords_path):
-    global tokenizer_bert, tokenizer_ro
+def construct_flat_datasets(args1, subwords_path):
+    global tokenizer_bert, tokenizer_ro, args
+
+    args = args1
     if args.bert:
         tokenizer_bert = FullTokenizer(vocab_file=args.bert_model_dir + "vocab.vocab")
         tokenizer_bert.vocab_size = len(tokenizer_bert.vocab)
@@ -25,13 +27,18 @@ def construct_flat_datasets(args, subwords_path):
         tokenizer_ro = construct_tokenizer(list(samples), subwords_path, args)
 
     sample_train = int(args.total_samples * args.train_dev_split)
-    gen_dataset = generator_tensors_ids(tokenizer_ro, tokenizer_bert, args)
 
-    dataset = list(gen_dataset)
-    nr_samples = len(dataset)
-    dataset = tf.convert_to_tensor(dataset, dtype=tf.int64)
-    segs = tf.zeros((nr_samples, args.seq_length), dtype=tf.dtypes.int64)
-    dataset = tf.data.Dataset.from_tensor_slices((dataset, segs))
+    if args.records:
+        dataset = tf.data.Dataset.from_generator(generator_tensors_ids_and_segs,
+                                        ((tf.int64, tf.int64), tf.int64), 
+                                        ((tf.TensorShape([None]), tf.TensorShape([None])), tf.TensorShape([None])))
+    else:
+        gen_dataset = generator_tensors_ids(tokenizer_ro, tokenizer_bert, args)
+        dataset = list(gen_dataset)
+        nr_samples = len(dataset)
+        dataset = tf.convert_to_tensor(dataset, dtype=tf.int64)
+        segs = tf.zeros((nr_samples, args.seq_length), dtype=tf.dtypes.int64)
+        dataset = tf.data.Dataset.from_tensor_slices((dataset, segs))
 
     train_dataset = dataset.take(sample_train)
     dev_dataset = dataset.skip(sample_train)
@@ -176,9 +183,25 @@ def encode_gec(source: str, target: str, tokenizer_ro, tokenizer_bert, args):
 
 def generator_tensors_ids(tokenizer_ro, tokenizer_bert, args):
     gen = generator_ids(tokenizer_ro, tokenizer_bert, args)
-    for s, t in gen:
+    for step, (s, t) in enumerate(gen):
+        if step % 10000 == 0:
+            tf.compat.v1.logging.info('tf record generation, step {}'.format(step))
+            
         yield (tf.convert_to_tensor(s, dtype=tf.int64), 
                 tf.convert_to_tensor(t, dtype=tf.int64))
+
+def generator_tensors_ids_and_segs():
+    global tokenizer_bert, tokenizer_ro, args
+
+    gen = generator_ids(tokenizer_ro, tokenizer_bert, args)
+    for step, (s, t) in enumerate(gen):
+        if step % 10000 == 0:
+            tf.compat.v1.logging.info('tf record generation, step {}'.format(step))
+        segs = tf.zeros((args.seq_length), dtype=tf.dtypes.int64)
+
+        yield (tf.convert_to_tensor(s, dtype=tf.int64), 
+                tf.convert_to_tensor(t, dtype=tf.int64)), segs
+                
 
 def get_text_samples(args) -> List[str]:
     gen = gec_generator_text(args)
