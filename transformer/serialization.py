@@ -168,6 +168,9 @@ def get_ids_dataset_tf_records(args):
     tf.compat.v1.logging.info('restoring datasets from {}'.format(args.tf_records))
     # get dataset
     path_tf_records = args.tf_records
+    if args.use_tpu:
+        path_tf_records = 'gs://' + args.bucket + '/' + path_tf_records
+
     tf_records_files = [join(path_tf_records, f) for f in listdir(path_tf_records) \
             if isfile(join(path_tf_records, f)) and f.endswith('.tfrecord')]
     try:
@@ -182,9 +185,9 @@ def get_ids_dataset_tf_records(args):
         tf.compat.v1.logging.error('No dev.tfrecords file in {}'.format(path_tf_records))
         raise e
 
-    if args.use_tpu:
-        train_tf_record_file =  'gs://' + args.bucket + '/' + train_tf_record_file
-        dev_tf_record_file = 'gs://' + args.bucket + '/' + dev_tf_record_file
+    # if args.use_tpu:
+    #     train_tf_record_file =  'gs://' + args.bucket + '/' + train_tf_record_file
+    #     dev_tf_record_file = 'gs://' + args.bucket + '/' + dev_tf_record_file
 
     tf.compat.v1.logging('Restoring tf records from {} {}'.format(train_tf_record_file, dev_tf_record_file))
 
