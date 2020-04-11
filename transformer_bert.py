@@ -48,8 +48,8 @@ tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki
 tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_test',
                 help='Checpoint save locations, or restore')
 # tf.compat.v1.flags.DEFINE_string('subwords', default='checkpoints/transformer_test/corpora', help='')
-tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='./bert/ro0/', help='path from where to load bert')
-tf.compat.v1.flags.DEFINE_string('tf_records', default='./corpora/tf_records/test/', help='path to tf records folder')
+tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/ro0/', help='path from where to load bert')
+tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/test/', help='path to tf records folder')
 
 # mode of execution
 """if bert is used, the decoder is still a transofrmer with transformer specific tokenization"""
@@ -84,6 +84,7 @@ args = tf.compat.v1.flags.FLAGS
 if args.use_tpu:
     subwords_path = 'gs://' + args.bucket + '/' + args.checkpoint + '/corpora'
     checkpoint_path = 'gs://' + args.bucket + '/' + args.checkpoint
+    
     # args.in_file_decode = 'gs://' + args.bucket + '/' + args.in_file_decode
     # args.out_file_decode = 'gs://' + args.bucket + '/' + args.out_file_decode
 else:

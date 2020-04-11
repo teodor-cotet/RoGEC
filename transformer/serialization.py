@@ -182,6 +182,12 @@ def get_ids_dataset_tf_records(args):
         tf.compat.v1.logging.error('No dev.tfrecords file in {}'.format(path_tf_records))
         raise e
 
+    if args.use_tpu:
+        train_tf_record_file =  'gs://' + args.bucket + '/' + train_tf_record_file
+        dev_tf_record_file = 'gs://' + args.bucket + '/' + dev_tf_record_file
+
+    tf.compat.v1.logging('Restoring tf records from {} {}'.format(train_tf_record_file, dev_tf_record_file))
+
     raw_train_dataset = tf.data.TFRecordDataset(train_tf_record_file)
     train_dataset = raw_train_dataset.map(parse_example_ids)
 
