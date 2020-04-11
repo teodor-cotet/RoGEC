@@ -318,9 +318,10 @@ def train_gec():
         # train_dataset, dev_dataset = construct_datatset_numpy(args)
         # construct_tf_records(args, subwords_path)
         train_dataset, dev_dataset, _, _= get_ids_dataset_tf_records(args)
-        # train_dataset, dev_dataset = prepare_datasets(train_dataset, dev_dataset, args)
+        train_dataset, dev_dataset = prepare_datasets(train_dataset, dev_dataset, args)
 
         for x, y in train_dataset.take(1):
+            tf.compat.v1.logging.info('input shapes: {}, {}'.format(x, y))
             tf.compat.v1.logging.info('input shapes: {}, {}'.format(x.shape, y.shape))
 
         if args.use_tpu:
