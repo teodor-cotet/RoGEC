@@ -442,14 +442,16 @@ def run_main():
         train_tf_records = os.path.join(args.tf_records, 'train.tfrecord')
         dev_tf_records = os.path.join(args.tf_records, 'dev.tfrecord')
         tokeinizer_ro_tf_records = os.path.join(args.tf_records, 'tokenizer_ro.subwords')
-        tokenizer_bert_tf_records = os.path.join(args.tf_records, 'corpora.subwords')
 
-        files_to_transfer = [train_tf_records, dev_tf_records, tokeinizer_ro_tf_records, 
-            tokenizer_bert_tf_records]
-        print(files_to_transfer)
+        files_to_transfer = [train_tf_records, dev_tf_records, tokeinizer_ro_tf_records]
+        tf.compat.v1.logging.info('uploading files to bucket {} {}'.format(args.bucket, files_to_transfer))
 
         for file_path in files_to_transfer:
-            upload_blob('ro-gec', file_path, file_path)
+            upload_blob(args.bucket, file_path, file_path)
+        
+        if args.bert:
+            tokenizer_bert_tf_records = os.path.join(args.tf_records, 'corpora.subwords')
+            upload_blob(args.bucket, tokenizer_bert_tf_records, tokenizer_bert_tf_records)
 
     if args.train_mode:
         # test_bert_trans()
