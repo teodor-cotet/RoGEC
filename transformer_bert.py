@@ -44,12 +44,12 @@ tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from whe
 
 
 # paths for model  1k_clean_dirty_better.txt 30k_clean_dirty_better.txt 10_mil_dirty_clean_better.txt
-tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/10_mil_dirty_clean_better.txt', help='')
-tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_10mil',
+tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/30k_clean_dirty_better.txt', help='')
+tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_30k',
                 help='Checpoint save locations, or restore')
 # tf.compat.v1.flags.DEFINE_string('subwords', default='checkpoints/transformer_test/corpora', help='')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/ro0/', help='path from where to load bert')
-tf.compat.v1.flags.DEFINE_string('tf_records', default='/media/teo/drive hdd/gec/corpora/tf_records/10mil_transformer', help='path to tf records folder')
+tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/test', help='path to tf records folder')
 
 # mode of execution
 """if bert is used, the decoder is still a transofrmer with transformer specific tokenization"""
@@ -60,9 +60,9 @@ tf.compat.v1.flags.DEFINE_bool('decode_mode',default=False, help='do prediction,
 
 # model params
 tf.compat.v1.flags.DEFINE_integer('num_layers', default=6, help='')
-tf.compat.v1.flags.DEFINE_integer('d_model', default=512,
+tf.compat.v1.flags.DEFINE_integer('d_model', default=256,
                         help='d_model size is the out of the embeddings, it must match the bert model size, if you use one')
-tf.compat.v1.flags.DEFINE_integer('seq_length', default=512, help='same as d_model')
+tf.compat.v1.flags.DEFINE_integer('seq_length', default=256, help='same as d_model')
 tf.compat.v1.flags.DEFINE_integer('dff', default=256, help='')
 tf.compat.v1.flags.DEFINE_integer('num_heads', default=8, help='')
 tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
@@ -71,7 +71,7 @@ tf.compat.v1.flags.DEFINE_integer('epochs', default=10, help='')
 tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(1000), help='')
 tf.compat.v1.flags.DEFINE_integer('batch_size', default=8, help='')
 tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.95, help='')
-tf.compat.v1.flags.DEFINE_integer('total_samples', default=10000000, help='')
+tf.compat.v1.flags.DEFINE_integer('total_samples', default=15000, help='')
 tf.compat.v1.flags.DEFINE_bool('show_batch_stats', default=True, help='do prediction, decoding')
 
 # for prediction purposes only
