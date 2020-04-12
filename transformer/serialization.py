@@ -193,8 +193,8 @@ def get_tokenizers_tf_records(args1):
     
     # get tokenizers (transformer + bert)
     path_tf_records = args.tf_records
-    if args.use_tpu:
-        path_tf_records = 'gs://' + args.bucket + '/' + path_tf_records
+    # if args.use_tpu:
+    #     path_tf_records = 'gs://' + args.bucket + '/' + path_tf_records
 
     tokenizer_ro_path = join(path_tf_records, 'tokenizer_ro')
     tokenizer_ro = tfds.features.text.SubwordTextEncoder.load_from_file(tokenizer_ro_path)

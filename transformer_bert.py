@@ -49,7 +49,7 @@ tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_
                 help='Checpoint save locations, or restore')
 # tf.compat.v1.flags.DEFINE_string('subwords', default='checkpoints/transformer_test/corpora', help='')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/ro0/', help='path from where to load bert')
-tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/test_bucket', help='path to tf records folder')
+tf.compat.v1.flags.DEFINE_string('tf_records', default='gs://bucket/corpora/tf_records/test_bucket', help='path to tf records folder')
 
 # mode of execution
 """if bert is used, the decoder is still a transofrmer with transformer specific tokenization"""
