@@ -24,7 +24,7 @@ from transformer.serialization import get_ids_dataset_tf_records, get_tokenizers
 
 # TPU cloud params
 tf.compat.v1.flags.DEFINE_string(
-    "tpu", default='teodor-cotet',
+    "tpu", default='second',
     help="The Cloud TPU to use for training. This should be either the name "
     "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 "
     "url.")
@@ -49,7 +49,7 @@ tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_
                 help='Checpoint save locations, or restore')
 # tf.compat.v1.flags.DEFINE_string('subwords', default='checkpoints/transformer_test/corpora', help='')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/ro0/', help='path from where to load bert')
-tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/10mil_transformer', help='path to tf records folder')
+tf.compat.v1.flags.DEFINE_string('tf_records', default='/home/teo/projects/gec/corpora/tf_records/test', help='path to tf records folder')
 
 # mode of execution
 """if bert is used, the decoder is still a transofrmer with transformer specific tokenization"""
@@ -60,9 +60,9 @@ tf.compat.v1.flags.DEFINE_bool('decode_mode',default=False, help='do prediction,
 
 # model params
 tf.compat.v1.flags.DEFINE_integer('num_layers', default=6, help='')
-tf.compat.v1.flags.DEFINE_integer('d_model', default=256,
+tf.compat.v1.flags.DEFINE_integer('d_model', default=512,
                         help='d_model size is the out of the embeddings, it must match the bert model size, if you use one')
-tf.compat.v1.flags.DEFINE_integer('seq_length', default=256, help='same as d_model')
+tf.compat.v1.flags.DEFINE_integer('seq_length', default=512, help='same as d_model')
 tf.compat.v1.flags.DEFINE_integer('dff', default=256, help='')
 tf.compat.v1.flags.DEFINE_integer('num_heads', default=8, help='')
 tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
@@ -444,7 +444,6 @@ def run_main():
         tokeinizer_ro_tf_records = os.path.join(args.tf_records, 'tokenizer_ro.subwords')
 
         files_to_transfer = [train_tf_records, dev_tf_records, tokeinizer_ro_tf_records]
-        tf.compat.v1.logging.info('uploading files to bucket {} {}'.format(args.bucket, files_to_transfer))
 
         for file_path in files_to_transfer:
             upload_blob(args.bucket, file_path, file_path)
