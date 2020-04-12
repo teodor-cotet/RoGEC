@@ -20,4 +20,4 @@ def upload_blob(bucket_name, source_file_name, destination_blob_name):
     )
 
 if __name__ == "__main__":
-    upload_blob('ro-gec', 'corpora/tf_records/test_bucket/train.tfrecord', 'corpora/tf_records')
+    upload_blob('ro-gec', 'corpora/tf_records/test_bucket/train.tfrecord', 'corpora/tf_records/test_bucket/train.tfrecord')
