@@ -44,12 +44,12 @@ tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from whe
 
 
 # paths for model  1k_clean_dirty_better.txt 30k_clean_dirty_better.txt 10_mil_dirty_clean_better.txt
-tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/30k_clean_dirty_better.txt', help='')
+tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/10_mil_dirty_clean_better.txt', help='')
 tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_30k',
                 help='Checpoint save locations, or restore')
 # tf.compat.v1.flags.DEFINE_string('subwords', default='checkpoints/transformer_test/corpora', help='')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/ro0/', help='path from where to load bert')
-tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/test_bucket', help='path to tf records folder')
+tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/10mil_transformer', help='path to tf records folder')
 
 # mode of execution
 """if bert is used, the decoder is still a transofrmer with transformer specific tokenization"""
