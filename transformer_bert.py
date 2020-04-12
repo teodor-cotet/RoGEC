@@ -45,11 +45,11 @@ tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from whe
 
 # paths for model  1k_clean_dirty_better.txt 30k_clean_dirty_better.txt 10_mil_dirty_clean_better.txt
 tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/10_mil_dirty_clean_better.txt', help='')
-tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_30k',
+tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_test',
                 help='Checpoint save locations, or restore')
 # tf.compat.v1.flags.DEFINE_string('subwords', default='checkpoints/transformer_test/corpora', help='')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/ro0/', help='path from where to load bert')
-tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/test/10mil_transformer', help='path to tf records folder')
+tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/10mil_bert', help='path to tf records folder')
 
 # mode of execution
 """if bert is used, the decoder is still a transofrmer with transformer specific tokenization"""
@@ -60,9 +60,9 @@ tf.compat.v1.flags.DEFINE_bool('decode_mode',default=False, help='do prediction,
 
 # model params
 tf.compat.v1.flags.DEFINE_integer('num_layers', default=6, help='')
-tf.compat.v1.flags.DEFINE_integer('d_model', default=512,
+tf.compat.v1.flags.DEFINE_integer('d_model', default=256,
                         help='d_model size is the out of the embeddings, it must match the bert model size, if you use one')
-tf.compat.v1.flags.DEFINE_integer('seq_length', default=512, help='same as d_model')
+tf.compat.v1.flags.DEFINE_integer('seq_length', default=256, help='same as d_model')
 tf.compat.v1.flags.DEFINE_integer('dff', default=256, help='')
 tf.compat.v1.flags.DEFINE_integer('num_heads', default=8, help='')
 tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
@@ -93,12 +93,13 @@ tokenizer_pt, tokenizer_en, tokenizer_ro, tokenizer_bert = None, None, None, Non
 transformer, optimizer, train_loss, train_accuracy = None, None, None, None
 eval_loss, eval_accuracy = None, None
 strategy = None
-train_step_signature = [tf.TensorSpec(shape=(None, None, None), dtype=tf.int32)]
+train_step_signature = [tf.TensorSpec(shape=(None, 2, args.seq_length), dtype=tf.int64),
+    tf.TensorSpec(shape=(None, args.seq_length), dtype=tf.int64)]
 train_step_signature_np = [tf.TensorSpec(shape=(None, None, None), dtype=tf.int64),
     tf.TensorSpec(shape=(None, None), dtype=tf.int64)]
 train_step_signature_mt = [tf.TensorSpec(shape=(None, None), dtype=tf.int64),
 tf.TensorSpec(shape=(None, None), dtype=tf.int64)]
-eval_step_signature = train_step_signature_np
+eval_step_signature = train_step_signature
 
 def generate_sentence(inp_sentence: str):
     global tokenizer_ro, tokenizer_bert, transformer, optimizer, args, subwords_path, checkpoint_path
@@ -233,7 +234,7 @@ def train_gec():
         
         return tf.nn.compute_average_loss(loss_, global_batch_size=args.batch_size)
 
-    @tf.function(input_signature=train_step_signature_np)
+    @tf.function(input_signature=train_step_signature)
     def train_step(data, inp_segs):
         global transformer, optimizer, train_loss, train_accuracy, strategy
         inp, tar = data[:, 0], data[:, 1]
