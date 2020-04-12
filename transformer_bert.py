@@ -19,7 +19,7 @@ from transformer.utils import create_masks
 from transformer.transformer_bert import TransformerBert
 from transformer.transformer import Transformer
 from transformer.transformer_scheduler import CustomSchedule
-from transformer.serialization import get_ids_dataset_tf_records, get_tokenizers_tf_records
+from transformer.serialization import get_ids_dataset_tf_records, get_tokenizers_tf_records, upload_blob
 
 
 # TPU cloud params
@@ -49,7 +49,7 @@ tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_
                 help='Checpoint save locations, or restore')
 # tf.compat.v1.flags.DEFINE_string('subwords', default='checkpoints/transformer_test/corpora', help='')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/ro0/', help='path from where to load bert')
-tf.compat.v1.flags.DEFINE_string('tf_records', default='gs://bucket/corpora/tf_records/test_bucket', help='path to tf records folder')
+tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/test_bucket', help='path to tf records folder')
 
 # mode of execution
 """if bert is used, the decoder is still a transofrmer with transformer specific tokenization"""
@@ -438,6 +438,19 @@ def test_transformer_dataset():
 def run_main():
     if args.records:
         construct_tf_records(args, subwords_path)
+
+        train_tf_records = os.path.join(args.tf_records, 'train.tfrecord')
+        dev_tf_records = os.path.join(args.tf_records, 'dev.tfrecord')
+        tokeinizer_ro_tf_records = os.path.join(args.tf_records, 'tokenizer_ro.subwords')
+        tokenizer_bert_tf_records = os.path.join(args.tf_records, 'corpora.subwords')
+
+        files_to_transfer = [train_tf_records, dev_tf_records, tokeinizer_ro_tf_records, 
+            tokenizer_bert_tf_records]
+        print(files_to_transfer)
+
+        for file_path in files_to_transfer:
+            upload_blob('ro-gec', file_path, file_path)
+
     if args.train_mode:
         # test_bert_trans()
         train_gec()

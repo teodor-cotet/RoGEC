@@ -1,10 +1,13 @@
-import tensorflow as tf
-import numpy as np
+import os
 from os import listdir
 from os.path import isfile, join
-import os
-from bert.tokenization.bert_tokenization import FullTokenizer
+
+import numpy as np
+import tensorflow as tf
 import tensorflow_datasets as tfds
+from bert.tokenization.bert_tokenization import FullTokenizer
+from google.cloud import storage
+
 args = None
 
 def _bytes_feature(value):
@@ -172,8 +175,6 @@ def get_ids_dataset_tf_records(args1):
     args = args1
     # get dataset
     path_tf_records = args.tf_records
-    if args.use_tpu:
-        path_tf_records = 'gs://' + args.bucket + '/' + path_tf_records
 
     train_tf_record_file = join(path_tf_records, 'train.tfrecord')
     dev_tf_record_file = join(path_tf_records, 'dev.tfrecord')
@@ -193,8 +194,6 @@ def get_tokenizers_tf_records(args1):
     
     # get tokenizers (transformer + bert)
     path_tf_records = args.tf_records
-    # if args.use_tpu:
-    #     path_tf_records = 'gs://' + args.bucket + '/' + path_tf_records
 
     tokenizer_ro_path = join(path_tf_records, 'tokenizer_ro')
     tokenizer_ro = tfds.features.text.SubwordTextEncoder.load_from_file(tokenizer_ro_path)
@@ -220,6 +219,24 @@ def get_text_dataset_tf_records(path_tf_records):
 
     return dataset
 
+def upload_blob(bucket_name, source_file_name, destination_blob_name):
+    """Uploads a file to the bucket."""
+    # bucket_name = "your-bucket-name"
+    # source_file_name = "local/path/to/file"
+    # destination_blob_name = "storage-object-name"
+
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(destination_blob_name)
+
+    blob.upload_from_filename(source_file_name)
+
+    print(
+        "File {} uploaded to {}.".format(
+            source_file_name, destination_blob_name
+        )
+    )
+
 if __name__ == "__main__":
    
     # example_encode_text()
@@ -241,4 +258,3 @@ if __name__ == "__main__":
     # x = tf.io.parse_tensor(y, out_type=tf.dtypes.int32)
     # print(_bytes_feature(b'test_string'))
     # print(_bytes_feature(u'test_bytes'.encode('utf-8')))
-    
