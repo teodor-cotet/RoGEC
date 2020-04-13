@@ -175,6 +175,8 @@ def get_ids_dataset_tf_records(args1):
     args = args1
     # get dataset
     path_tf_records = args.tf_records
+    if args.use_tpu:
+        path_tf_records = join('gs://' + args.bucket, path_tf_records)
 
     train_tf_record_file = join(path_tf_records, 'train.tfrecord')
     dev_tf_record_file = join(path_tf_records, 'dev.tfrecord')
