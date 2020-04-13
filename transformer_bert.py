@@ -71,7 +71,7 @@ tf.compat.v1.flags.DEFINE_integer('epochs', default=10, help='')
 tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(1000), help='')
 tf.compat.v1.flags.DEFINE_integer('batch_size', default=8, help='')
 tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.95, help='')
-tf.compat.v1.flags.DEFINE_integer('total_samples', default=15000, help='')
+tf.compat.v1.flags.DEFINE_integer('total_samples', default=10000000, help='')
 tf.compat.v1.flags.DEFINE_bool('show_batch_stats', default=True, help='do prediction, decoding')
 
 # for prediction purposes only
