@@ -45,11 +45,11 @@ tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from whe
 
 # paths for model  1k_clean_dirty_better.txt 30k_clean_dirty_better.txt 10_mil_dirty_clean_better.txt
 tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/10_mil_dirty_clean_better.txt', help='')
-tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_test',
+tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/10mil_transformer_256_test',
                 help='Checpoint save locations, or restore')
 # tf.compat.v1.flags.DEFINE_string('subwords', default='checkpoints/transformer_test/corpora', help='')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/ro0_5x/', help='path from where to load bert')
-tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/10mil_transformer_256', help='path to tf records folder')
+tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/test', help='path to tf records folder')
 
 # mode of execution
 """if bert is used, the decoder is still a transofrmer with transformer specific tokenization"""
@@ -68,8 +68,8 @@ tf.compat.v1.flags.DEFINE_integer('num_heads', default=8, help='')
 tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
 tf.compat.v1.flags.DEFINE_integer('dict_size', default=(2**15), help='')
 tf.compat.v1.flags.DEFINE_integer('epochs', default=10, help='')
-tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(1000), help='')
-tf.compat.v1.flags.DEFINE_integer('batch_size', default=8, help='')
+tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(1024 * 1024 * 4), help='')
+tf.compat.v1.flags.DEFINE_integer('batch_size', default=512, help='')
 tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.95, help='')
 tf.compat.v1.flags.DEFINE_integer('total_samples', default=10000000, help='')
 tf.compat.v1.flags.DEFINE_bool('show_batch_stats', default=True, help='do prediction, decoding')
@@ -82,9 +82,6 @@ args = tf.compat.v1.flags.FLAGS
 if args.use_tpu:
     subwords_path = 'gs://' + args.bucket + '/' + args.checkpoint + '/corpora'
     checkpoint_path = 'gs://' + args.bucket + '/' + args.checkpoint
-    
-    # args.in_file_decode = 'gs://' + args.bucket + '/' + args.in_file_decode
-    # args.out_file_decode = 'gs://' + args.bucket + '/' + args.out_file_decode
 else:
     subwords_path = args.checkpoint + '/corpora'
     checkpoint_path = args.checkpoint
@@ -177,8 +174,8 @@ def correct_from_file(in_file: str, out_file: str):
     with open(in_file, 'r') as fin, open(out_file, 'w') as fout:
         for line in fin:
             predicted_sentences = correct_gec(line)
-            print('original: ', line)
-            print('predicted: ', predicted_sentences)
+            tf.compat.v1.logging.info('original: ', line)
+            tf.compat.v1.logging.info('predicted: ', predicted_sentences)
 
             if args.use_tpu == False:
                 fout.write(predicted_sentences + '\n')
@@ -208,7 +205,7 @@ def get_model_gec():
                             pe_input=vocab_size, 
                             pe_target=vocab_size,
                             rate=args.dropout)
-        print('transformer bert loaded')
+        tf.compat.v1.logging.info('transformer bert loaded')
     else:
         transformer = Transformer(args.num_layers, args.d_model, args.num_heads, args.dff,
                             vocab_size, vocab_size, 
@@ -218,86 +215,86 @@ def get_model_gec():
     tf.compat.v1.logging.info('transformer model constructed')
     return transformer, optimizer
 
+def loss_function(real, pred):
+    loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
+        from_logits=True, reduction=tf.keras.losses.Reduction.NONE)
+    
+    # mask to compute loss
+    mask = tf.math.logical_not(tf.math.equal(real, 0))
+    loss_ = loss_object(real, pred)
+
+    mask = tf.cast(mask, dtype=loss_.dtype)
+    loss_ *= mask
+    
+    return tf.nn.compute_average_loss(loss_, global_batch_size=args.batch_size)
+
+@tf.function(input_signature=train_step_signature)
+def train_step(data, inp_segs):
+    global transformer, optimizer, train_loss, train_accuracy, strategy
+    inp, tar = data[:, 0], data[:, 1]
+    tar_inp = tar[:, :-1]
+    tar_real = tar[:, 1:]
+    enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
+    
+    with tf.GradientTape() as tape:
+        if args.bert is True:
+            predictions, _ = transformer(inp, inp_segs, tar_inp, 
+                                    True, 
+                                    enc_padding_mask, 
+                                    combined_mask, 
+                                    dec_padding_mask)
+        else:
+            predictions, _ = transformer(inp, tar_inp, 
+                                    True, 
+                                    enc_padding_mask, 
+                                    combined_mask, 
+                                    dec_padding_mask)
+        loss = loss_function(tar_real, predictions)
+    gradients = tape.gradient(loss, transformer.trainable_variables)
+    optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
+
+    train_loss.update_state(loss)
+    train_accuracy.update_state(tar_real, predictions)
+
+@tf.function(input_signature=eval_step_signature)
+def eval_step(data, inp_segs):
+    global transformer, optimizer, eval_loss, eval_accuracy
+    inp, tar = data[:, 0], data[:, 1]
+    tar_inp = tar[:, :-1]
+    tar_real = tar[:, 1:]
+    enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
+
+    with tf.GradientTape() as tape:
+        if args.bert:
+            predictions, _ = transformer(inp, inp_segs, tar_inp, 
+                                    True, 
+                                    enc_padding_mask, 
+                                    combined_mask, 
+                                    dec_padding_mask)
+        else:
+            predictions, _ = transformer(inp, tar_inp, 
+                                    True, 
+                                    enc_padding_mask, 
+                                    combined_mask, 
+                                    dec_padding_mask)
+        loss = loss_function(tar_real, predictions)
+    eval_loss.update_state(loss)
+    eval_accuracy.update_state(tar_real, predictions)
+
+@tf.function
+def distributed_train_step(dataset_inputs):
+    data, segs = dataset_inputs
+    return strategy.experimental_run_v2(train_step, args=(data, segs))
+
+@tf.function
+def distributed_eval_step(dataset_inputs):
+    data, segs = dataset_inputs
+    return strategy.experimental_run_v2(eval_step, args=(data, segs))
+
+
 def train_gec():
     global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy, strategy, checkpoint_path
-
-    def loss_function(real, pred):
-        loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True, reduction=tf.keras.losses.Reduction.NONE)
-        
-        # mask to compute loss
-        mask = tf.math.logical_not(tf.math.equal(real, 0))
-        loss_ = loss_object(real, pred)
-
-        mask = tf.cast(mask, dtype=loss_.dtype)
-        loss_ *= mask
-        
-        return tf.nn.compute_average_loss(loss_, global_batch_size=args.batch_size)
-
-    @tf.function(input_signature=train_step_signature)
-    def train_step(data, inp_segs):
-        global transformer, optimizer, train_loss, train_accuracy, strategy
-        inp, tar = data[:, 0], data[:, 1]
-        tar_inp = tar[:, :-1]
-        tar_real = tar[:, 1:]
-        enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
-        # print(inp_segs.shape, inp.shape, tar_inp.shape)
-        
-        with tf.GradientTape() as tape:
-            if args.bert is True:
-                predictions, _ = transformer(inp, inp_segs, tar_inp, 
-                                        True, 
-                                        enc_padding_mask, 
-                                        combined_mask, 
-                                        dec_padding_mask)
-            else:
-                predictions, _ = transformer(inp, tar_inp, 
-                                        True, 
-                                        enc_padding_mask, 
-                                        combined_mask, 
-                                        dec_padding_mask)
-            loss = loss_function(tar_real, predictions)
-        gradients = tape.gradient(loss, transformer.trainable_variables)
-        optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
-
-        train_loss.update_state(loss)
-        train_accuracy.update_state(tar_real, predictions)
-
-    @tf.function(input_signature=eval_step_signature)
-    def eval_step(data, inp_segs):
-        global transformer, optimizer, eval_loss, eval_accuracy
-        inp, tar = data[:, 0], data[:, 1]
-        tar_inp = tar[:, :-1]
-        tar_real = tar[:, 1:]
-        enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
-
-        with tf.GradientTape() as tape:
-            if args.bert:
-                predictions, _ = transformer(inp, inp_segs, tar_inp, 
-                                        True, 
-                                        enc_padding_mask, 
-                                        combined_mask, 
-                                        dec_padding_mask)
-            else:
-                predictions, _ = transformer(inp, tar_inp, 
-                                        True, 
-                                        enc_padding_mask, 
-                                        combined_mask, 
-                                        dec_padding_mask)
-            loss = loss_function(tar_real, predictions)
-        eval_loss.update_state(loss)
-        eval_accuracy.update_state(tar_real, predictions)
-
-    @tf.function
-    def distributed_train_step(dataset_inputs):
-        data, segs = dataset_inputs
-        return strategy.experimental_run_v2(train_step, args=(data, segs))
     
-    @tf.function
-    def distributed_eval_step(dataset_inputs):
-        data, segs = dataset_inputs
-        return strategy.experimental_run_v2(eval_step, args=(data, segs))
-
     with open('info.log', 'wt') as log:
         
         # train_dataset, dev_dataset = construct_datasets_gec(args, subwords_path)
@@ -346,8 +343,8 @@ def train_gec():
                 else:
                     data, inp_seg = data
                     train_step(data, inp_seg)
-                if args.show_batch_stats and batch % 1 == 0:
-                    print('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
+                if args.show_batch_stats and batch % 1000 == 0:
+                    tf.compat.v1.logging.info('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
                         epoch + 1, batch, train_loss.result(), train_accuracy.result()))
                     log.write('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
                         epoch + 1, batch, train_loss.result(), train_accuracy.result()))
@@ -359,7 +356,7 @@ def train_gec():
                                                                     ckpt_save_path))
                 log.flush()
             
-            print('Final train - epoch {} loss {:.4f} accuracy {:.4f}'.format(epoch + 1, 
+            tf.compat.v1.logging.info('Final train - epoch {} loss {:.4f} accuracy {:.4f}'.format(epoch + 1, 
                                                             train_loss.result(), 
                                                             train_accuracy.result()))
             log.write('Final train - epoch {} loss {:.4f} accuracy {:.4f} \n'.format(epoch + 1, 
@@ -376,13 +373,13 @@ def train_gec():
                     eval_step(data, inp_seg)
 
                 if args.show_batch_stats and batch % 1000 == 0:
-                    print('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
+                    tf.compat.v1.logging.info('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
                         epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
                     log.write('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
                         epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
                     log.flush()
                     
-            print('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
+            tf.compat.v1.logging.info('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
                         epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
             log.write('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
                         epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
@@ -415,7 +412,7 @@ def test_bert_trans():
                                     look_ahead_mask=None,
                                     dec_padding_mask=None)
 
-    print(fn_out.shape)  # (batch_size, tar_seq_len, target_vocab_size)
+    tf.compat.v1.logging.info(fn_out.shape)  # (batch_size, tar_seq_len, target_vocab_size)
 
 def test_transformer_dataset():
     global args 
