@@ -450,7 +450,7 @@ def run_main():
             upload_blob(args.bucket, file_path, file_path)
         
         if args.bert:
-            tokenizer_bert_tf_records = os.path.join(args.tf_records, 'corpora.subwords')
+            tokenizer_bert_tf_records = os.path.join(args.tf_records, 'tokenizer_bert.vocab')
             upload_blob(args.bucket, tokenizer_bert_tf_records, tokenizer_bert_tf_records)
 
     if args.train_mode:
