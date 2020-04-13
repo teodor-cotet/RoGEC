@@ -469,12 +469,12 @@ def main(argv):
         tf.compat.v1.logging.info('Running on TPU {}'.format(tpu_cluster_resolver.cluster_spec().as_dict()['worker']))
         tf.compat.v1.logging.info("Tpu replicas in sync: {}".format(strategy.num_replicas_in_sync))
         with strategy.scope():
-            if args.test:
+            if args.test_model:
                 test_bert_trans()
             else:
                 run_main()
     else:
-        if args.test:
+        if args.test_model:
             test_bert_trans()
         else:
             run_main()
