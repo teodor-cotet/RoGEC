@@ -24,7 +24,7 @@ from transformer.serialization import get_ids_dataset_tf_records, get_tokenizers
 
 # TPU cloud params
 tf.compat.v1.flags.DEFINE_string(
-    "tpu", default='teodor-cotet',
+    "tpu", default='second',
     help="The Cloud TPU to use for training. This should be either the name "
     "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 "
     "url.")
@@ -45,10 +45,10 @@ tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from whe
 
 # paths for datasets  1k_clean_dirty_better.txt 30k_clean_dirty_better.txt 10_mil_dirty_clean_better.txt
 tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/10_mil_dirty_clean_better.txt', help='')
-tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_basex',
+tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_bert',
                 help='Checpoint save locations, or restore')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/ro0_5x/', help='path from where to load bert')
-tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/10mil_transformer_256', help='path to tf records folder')
+tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/bert_256', help='path to tf records folder')
 
 # mode of execution
 """if bert is used, the decoder is still a transofrmer with transformer specific tokenization"""
@@ -68,7 +68,7 @@ tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
 tf.compat.v1.flags.DEFINE_integer('dict_size', default=(2**15), help='')
 tf.compat.v1.flags.DEFINE_integer('epochs', default=100, help='')
 tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(1024 * 1024 * 4), help='')
-tf.compat.v1.flags.DEFINE_integer('batch_size', default=512, help='')
+tf.compat.v1.flags.DEFINE_integer('batch_size', default=256, help='')
 tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.95, help='')
 tf.compat.v1.flags.DEFINE_integer('total_samples', default=10000000, help='')
 tf.compat.v1.flags.DEFINE_bool('show_batch_stats', default=True, help='do prediction, decoding')
