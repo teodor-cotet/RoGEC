@@ -45,7 +45,7 @@ tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from whe
 
 # paths for datasets  1k_clean_dirty_better.txt 30k_clean_dirty_better.txt 10_mil_dirty_clean_better.txt
 tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/10_mil_dirty_clean_better.txt', help='')
-tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/10mil_transformer_256',
+tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_basex',
                 help='Checpoint save locations, or restore')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/ro0_5x/', help='path from where to load bert')
 tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/10mil_transformer_256', help='path to tf records folder')
@@ -289,7 +289,6 @@ def distributed_train_step(dataset_inputs):
 def distributed_eval_step(dataset_inputs):
     data, segs = dataset_inputs
     return strategy.experimental_run_v2(eval_step, args=(data, segs))
-
 
 def train_gec():
     global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy, strategy, checkpoint_path
