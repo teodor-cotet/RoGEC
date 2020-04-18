@@ -24,7 +24,7 @@ from transformer.serialization import get_ids_dataset_tf_records, get_tokenizers
 
 # TPU cloud params
 tf.compat.v1.flags.DEFINE_string(
-    "tpu", default='second',
+    "tpu", default='teodor-cotet',
     help="The Cloud TPU to use for training. This should be either the name "
     "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 "
     "url.")
@@ -45,10 +45,10 @@ tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from whe
 
 # paths for datasets  1k_clean_dirty_better.txt 30k_clean_dirty_better.txt 10_mil_dirty_clean_better.txt
 tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/10_mil_dirty_clean_better.txt', help='')
-tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_bert',
+tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_256',
                 help='Checpoint save locations, or restore')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/ro0_5x/', help='path from where to load bert')
-tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/bert_256', help='path to tf records folder')
+tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/transformer_256', help='path to tf records folder')
 
 # mode of execution
 """if bert is used, the decoder is still a transofrmer with transformer specific tokenization"""
