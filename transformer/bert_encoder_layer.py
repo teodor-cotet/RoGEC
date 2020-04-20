@@ -6,7 +6,7 @@ class BertEncoder(tf.keras.layers.Layer):
     def __init__(self, model_dir, d_model, args):
         super(BertEncoder, self).__init__()
         bert_params = bert.params_from_pretrained_ckpt(model_dir)
-        # bert_params['trainable'] = False
+        bert_params['trainable'] = False
         self.bert_layer = bert.BertModelLayer.from_params(bert_params, name="bert_layer")
         self.model_dir = model_dir
         tf.compat.v1.logging.info('bert model loaded from {}'.format(model_dir))
