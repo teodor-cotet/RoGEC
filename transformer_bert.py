@@ -47,7 +47,7 @@ tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from whe
 
 # paths for datasets  1k_clean_dirty_better.txt 30k_clean_dirty_better.txt 10_mil_dirty_clean_better.txt
 tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/30k_clean_dirty_better.txt', help='')
-tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_bert_256',
+tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_bert_30k',
                 help='Checpoint save locations, or restore')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/ro0_5x/', help='path from where to load bert')
 tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/transformer_256', help='path to tf records folder')
@@ -69,8 +69,8 @@ tf.compat.v1.flags.DEFINE_integer('dff', default=256, help='')
 tf.compat.v1.flags.DEFINE_integer('num_heads', default=8, help='')
 tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
 tf.compat.v1.flags.DEFINE_integer('dict_size', default=(2**15), help='')
-tf.compat.v1.flags.DEFINE_integer('epochs', default=100, help='')
-tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(4), help='')
+tf.compat.v1.flags.DEFINE_integer('epochs', default=500, help='')
+tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(4 * 1024 * 1024), help='')
 tf.compat.v1.flags.DEFINE_integer('batch_size', default=256, help='')
 tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.7, help='')
 tf.compat.v1.flags.DEFINE_integer('total_samples', default=10000000, help='')
