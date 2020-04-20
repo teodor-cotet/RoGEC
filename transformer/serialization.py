@@ -190,25 +190,21 @@ def get_ids_dataset_tf_records(args1):
     dev_dataset = raw_dev_dataset.map(parse_example_ids)
     return train_dataset, dev_dataset
 
-def get_tokenizers_tf_records(args1):
+def get_tokenizers_ckeckpoint(args1):
     global args
     args = args1
-    
-    # get tokenizers (transformer + bert)
-    path_tf_records = args.tf_records
-
-    tokenizer_ro_path = join(path_tf_records, 'tokenizer_ro')
+    tokenizer_ro_path = join(args.checkpoint, 'tokenizer_ro')
     tokenizer_ro = tfds.features.text.SubwordTextEncoder.load_from_file(tokenizer_ro_path)
     tf.compat.v1.logging.info('restoring ro tokenizer from {}'.format(tokenizer_ro_path))
 
     tokenizer_bert = None
     if args.bert:
-        tokenizer_bert_path = join(path_tf_records, 'corpora.subwords')
+        tokenizer_bert_path = join(args.checkpoint, 'tokenizer_bert.vocab')
         tokenizer_bert = FullTokenizer(vocab_file=tokenizer_bert_path)
         tokenizer_bert.vocab_size = len(tokenizer_bert.vocab)
         tf.compat.v1.logging.info('restoring bert tokenizer from {}'.format(tokenizer_bert_path))
 
-    tf.compat.v1.logging.info('datasets restored')
+    tf.compat.v1.logging.info('tokenizers restored')
     return tokenizer_ro, tokenizer_bert 
 
 

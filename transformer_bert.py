@@ -12,14 +12,16 @@ import numpy as np
 import tensorflow as tf
 from absl import app as absl_app
 from bert.tokenization.bert_tokenization import FullTokenizer
+import bert
 
-from transformer.dataset import construct_datasets_gec, construct_tokenizer, prepare_tensors,\
+from transformer.dataset import construct_datasets_gec, construct_tokenizer,\
         construct_datatset_numpy, prepare_datasets, construct_tf_records
 from transformer.utils import create_masks
 from transformer.transformer_bert import TransformerBert
 from transformer.transformer import Transformer
 from transformer.transformer_scheduler import CustomSchedule
-from transformer.serialization import get_ids_dataset_tf_records, get_tokenizers_tf_records, upload_blob
+from transformer.serialization import get_ids_dataset_tf_records, upload_blob,\
+                                        get_tokenizers_ckeckpoint
 
 
 # TPU cloud params
@@ -44,8 +46,8 @@ tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from whe
 
 
 # paths for datasets  1k_clean_dirty_better.txt 30k_clean_dirty_better.txt 10_mil_dirty_clean_better.txt
-tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/10_mil_dirty_clean_better.txt', help='')
-tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_256',
+tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/30k_clean_dirty_better.txt', help='')
+tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_bert_256',
                 help='Checpoint save locations, or restore')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/ro0_5x/', help='path from where to load bert')
 tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/transformer_256', help='path to tf records folder')
@@ -56,6 +58,7 @@ tf.compat.v1.flags.DEFINE_bool('bert', default=False, help='use bert as encoder 
 tf.compat.v1.flags.DEFINE_bool('records', default=False, help='generate tf records files + tokenizers (in path tf_records)')
 tf.compat.v1.flags.DEFINE_bool('train_mode', default=False, help='do training')
 tf.compat.v1.flags.DEFINE_bool('decode_mode',default=False, help='do prediction, decoding')
+tf.compat.v1.flags.DEFINE_bool('use_txt', default=False, help='dataset from txt file args.dataset_file')
 
 # model params
 tf.compat.v1.flags.DEFINE_integer('num_layers', default=6, help='')
@@ -67,9 +70,9 @@ tf.compat.v1.flags.DEFINE_integer('num_heads', default=8, help='')
 tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
 tf.compat.v1.flags.DEFINE_integer('dict_size', default=(2**15), help='')
 tf.compat.v1.flags.DEFINE_integer('epochs', default=100, help='')
-tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(1024 * 1024 * 4), help='')
+tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(4), help='')
 tf.compat.v1.flags.DEFINE_integer('batch_size', default=256, help='')
-tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.95, help='')
+tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.7, help='')
 tf.compat.v1.flags.DEFINE_integer('total_samples', default=10000000, help='')
 tf.compat.v1.flags.DEFINE_bool('show_batch_stats', default=True, help='do prediction, decoding')
 
@@ -101,7 +104,7 @@ def generate_sentence(inp_sentence: str):
     global tokenizer_ro, tokenizer_bert, transformer, optimizer, args, subwords_path, checkpoint_path
 
     if tokenizer_ro is None or (args.bert and tokenizer_bert is None):
-        tokenizer_ro, tokenizer_bert = get_tokenizers_tf_records(args)
+        tokenizer_ro, tokenizer_bert = get_tokenizers_ckeckpoint(args)
 
     if transformer is None:
         transformer, optimizer = get_model_gec()
@@ -173,8 +176,8 @@ def correct_from_file(in_file: str, out_file: str):
     with open(in_file, 'r') as fin, open(out_file, 'w') as fout:
         for line in fin:
             predicted_sentences = correct_gec(line)
-            tf.compat.v1.logging.info('original: ', line)
-            tf.compat.v1.logging.info('predicted: ', predicted_sentences)
+            tf.compat.v1.logging.info('original: {}'.format(line))
+            tf.compat.v1.logging.info('predicted: {}'.format(predicted_sentences))
 
             if args.use_tpu == False:
                 fout.write(predicted_sentences + '\n')
@@ -203,7 +206,7 @@ def get_model_gec():
                             model_dir=args.bert_model_dir, 
                             pe_input=vocab_size, 
                             pe_target=vocab_size,
-                            rate=args.dropout)
+                            rate=args.dropout, args=args)
         tf.compat.v1.logging.info('transformer bert loaded')
     else:
         transformer = Transformer(args.num_layers, args.d_model, args.num_heads, args.dff,
@@ -212,6 +215,7 @@ def get_model_gec():
                             pe_target=vocab_size,
                             rate=args.dropout)
     tf.compat.v1.logging.info('transformer model constructed')
+    
     return transformer, optimizer
 
 def loss_function(real, pred):
@@ -251,6 +255,11 @@ def train_step(data, inp_segs):
         loss = loss_function(tar_real, predictions)
     gradients = tape.gradient(loss, transformer.trainable_variables)
     optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
+
+    tf.compat.v1.logging.info('transformer summary: {}'.format(transformer.summary()))
+    # if args.bert:
+    #     bert.load_bert_weights(transformer.encoder.bert_layer, os.path.join(args.bert_model_dir, "bert_model.ckpt"))
+    #     tf.compat.v1.logging.info('bert weights loaded')
 
     train_loss.update_state(loss)
     train_accuracy.update_state(tar_real, predictions)
@@ -295,13 +304,15 @@ def train_gec():
     
     with open('info.log', 'wt') as log:
         
-        # train_dataset, dev_dataset = construct_datasets_gec(args, subwords_path)
+        if args.use_txt:
+            train_dataset, dev_dataset = construct_datasets_gec(args, subwords_path)
+        else:
+            train_dataset, dev_dataset, = get_ids_dataset_tf_records(args)
         # train_dataset, dev_dataset = construct_datatset_numpy(args)
-        train_dataset, dev_dataset, = get_ids_dataset_tf_records(args)
-        train_dataset, dev_dataset = prepare_datasets(train_dataset, dev_dataset, args)
-
+        
         for sents, seg in train_dataset.take(1):
             tf.compat.v1.logging.info('input shapes: {} {}'.format(sents.shape, seg.shape))
+            # tf.compat.v1.logging.info('input: {} {}'.format(sents, seg))
 
         if args.use_tpu:
            train_dataset = strategy.experimental_distribute_dataset(train_dataset)
@@ -313,6 +324,7 @@ def train_gec():
         eval_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='eval_accuracy')
 
         transformer, optimizer = get_model_gec()
+      
         # object you want to checkpoint are saved as attributes of the checkpoint obj
         if args.bert:
             ckpt = tf.train.Checkpoint(decoder=transformer.decoder, 
@@ -334,18 +346,18 @@ def train_gec():
             eval_loss.reset_states()
             eval_accuracy.reset_states()
 
-            for batch, data in enumerate(train_dataset):
+            for batch_idx, data in enumerate(train_dataset):
                 
                 if args.use_tpu:
                     distributed_train_step(data)
                 else:
                     data, inp_seg = data
                     train_step(data, inp_seg)
-                if args.show_batch_stats and batch % 100000 == 0:
+                if args.show_batch_stats and (batch_idx + 1) % 100000 == 0:
                     tf.compat.v1.logging.info('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
-                        epoch + 1, batch, train_loss.result(), train_accuracy.result()))
+                        epoch + 1, batch_idx, train_loss.result(), train_accuracy.result()))
                     log.write('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
-                        epoch + 1, batch, train_loss.result(), train_accuracy.result()))
+                        epoch + 1, batch_idx, train_loss.result(), train_accuracy.result()))
                     log.flush()
 
             if (epoch + 1) % 2 == 0:
@@ -362,7 +374,7 @@ def train_gec():
                                                             train_accuracy.result()))
             log.flush()
             # eval
-            for batch, data in enumerate(dev_dataset):
+            for batch_idx, data in enumerate(dev_dataset):
                 
                 if args.use_tpu:
                    distributed_eval_step(data)
@@ -370,17 +382,17 @@ def train_gec():
                     data, inp_seg = data
                     eval_step(data, inp_seg)
 
-                if args.show_batch_stats and batch % 100000 == 0:
+                if args.show_batch_stats and (batch_idx + 1) % 100000 == 0:
                     tf.compat.v1.logging.info('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
-                        epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
+                        epoch + 1, batch_idx, eval_loss.result(), eval_accuracy.result()))
                     log.write('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
-                        epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
+                        epoch + 1, batch_idx, eval_loss.result(), eval_accuracy.result()))
                     log.flush()
                     
-            tf.compat.v1.logging.info('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
-                        epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
-            log.write('Final dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
-                        epoch + 1, batch, eval_loss.result(), eval_accuracy.result()))
+            tf.compat.v1.logging.info('Final dev - epoch {} loss {:.4f} accuracy {:.4f}'.format(
+                        epoch + 1, eval_loss.result(), eval_accuracy.result()))
+            log.write('Final dev - epoch {} loss {:.4f} accuracy {:.4f}\n'.format(
+                        epoch + 1, eval_loss.result(), eval_accuracy.result()))
             log.flush()
 
 def test_bert_trans():
@@ -411,25 +423,6 @@ def test_bert_trans():
                                     dec_padding_mask=None)
 
     tf.compat.v1.logging.info(fn_out.shape)  # (batch_size, tar_seq_len, target_vocab_size)
-
-def test_transformer_dataset():
-    global args 
-    if args.bert is True:
-        sample_transformer = TransformerBert(num_layers=2, d_model=512, num_heads=8, dff=2048, 
-            input_vocab_size=8500, target_vocab_size=8000, 
-            model_dir=args.bert_model_dir, pe_input=10000, pe_target=6000)
-    else:
-        sample_transformer = Transformer(
-            num_layers=2, d_model=512, num_heads=8, dff=2048, 
-            input_vocab_size=8500, target_vocab_size=8000, 
-            pe_input=10000, pe_target=6000)
-
-    inps = tf.random.uniform((1024, 38), dtype=tf.int64, minval=0, maxval=8500)
-    tars = tf.random.uniform(inps.shape, dtype=tf.int64, minval=0, maxval=8000)
-
-    dataset = tf.data.Dataset.from_tensor_slices((inps, tars))
-    dataset = dataset.batch(args.batch_size, drop_remainder=True)
-    dataset = dataset.map(prepare_tensors)
 
 def run_main():
     if args.records:

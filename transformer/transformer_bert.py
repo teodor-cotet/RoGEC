@@ -7,10 +7,10 @@ class TransformerBert(tf.keras.Model):
     def __init__(self, num_layers=None, d_model=None, num_heads=None, dff=None,
                 input_vocab_size=None, 
                 target_vocab_size=None, model_dir=None, pe_input=None, pe_target=None, rate=0.1, 
-                decoder=None, final_layer=None):
+                decoder=None, final_layer=None, args=None):
         super(TransformerBert, self).__init__()
 
-        self.encoder = BertEncoder(model_dir=model_dir, d_model=d_model)
+        self.encoder = BertEncoder(model_dir=model_dir, d_model=d_model, args=args)
         if decoder:
             self.decoder = decoder
         else:

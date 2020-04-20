@@ -1,5 +1,6 @@
 import tensorflow as tf
 import os
+from os.path import join
 from shutil import copyfile
 from bert.tokenization.bert_tokenization import FullTokenizer
 import tensorflow_datasets as tfds
@@ -16,7 +17,7 @@ def construct_flat_datasets(args1, subwords_path):
 
     args = args1
     if args.bert:
-        tokenizer_bert = FullTokenizer(vocab_file=args.bert_model_dir + "vocab.vocab")
+        tokenizer_bert = FullTokenizer(vocab_file=join(args.bert_model_dir, "vocab.vocab"))
         tokenizer_bert.vocab_size = len(tokenizer_bert.vocab)
 
     samples = get_text_samples(args)
@@ -36,6 +37,7 @@ def construct_flat_datasets(args1, subwords_path):
         gen_dataset = generator_tensors_ids(tokenizer_ro, tokenizer_bert, args)
         dataset = list(gen_dataset)
         nr_samples = len(dataset)
+        sample_train = int(args.train_dev_split * nr_samples)
         dataset = tf.convert_to_tensor(dataset, dtype=tf.int64)
         segs = tf.zeros((nr_samples, args.seq_length), dtype=tf.dtypes.int64)
         dataset = tf.data.Dataset.from_tensor_slices((dataset, segs))
@@ -47,7 +49,7 @@ def construct_flat_datasets(args1, subwords_path):
 
 def construct_datasets_gec(args, subwords_path):
     train_dataset, dev_dataset = construct_flat_datasets(args, subwords_path)
-    return prepare_datasets(train_dataset, dev_dataset)
+    return prepare_datasets(train_dataset, dev_dataset, args)
    
 def prepare_datasets(train_dataset, dev_dataset, args):
     train_dataset = train_dataset.shuffle(args.buffer_size).batch(args.batch_size, drop_remainder=True)
@@ -114,20 +116,6 @@ def construct_datatset_numpy(args1):
     # for x, y in train_dataset.take(2):
     #     print(x.shape)
     return train_dataset, val_dataset
-
-def prepare_tensors(inp, tar):
-    # inp, tar with shape = (seq_length, )
-    segs = tf.ones((64, 38), dtype=tf.int64)
-    tar_inp = tar[:, :-1]
-    tar_real = tar[:, 1:]
-    enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
-
-    return (inp, segs, enc_padding_mask, combined_mask, dec_padding_mask), tar
-
-def make_dsitr(source: List[int], tar: List[int]):
-    tar_inp = tar[:, :-1]
-    tar_real = tar[:, 1:]
-    enc_padding_mask, combined_mask, dec_padding_mask = create_masks(source, tar_inp)
 
 def generator_ids(tokenizer_ro, tokenizer_bert, args):
 
