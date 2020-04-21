@@ -47,7 +47,7 @@ tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from whe
 
 # paths for datasets  1k_clean_dirty_better.txt 30k_clean_dirty_better.txt 10_mil_dirty_clean_better.txt
 tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/30k_clean_dirty_better.txt', help='')
-tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/transformer_bert_30k',
+tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/bert_30k_500',
                 help='Checpoint save locations, or restore')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/ro0_5x/', help='path from where to load bert')
 tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/transformer_256', help='path to tf records folder')
@@ -257,9 +257,6 @@ def train_step(data, inp_segs):
     optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
 
     tf.compat.v1.logging.info('transformer summary: {}'.format(transformer.summary()))
-    # if args.bert:
-    #     bert.load_bert_weights(transformer.encoder.bert_layer, os.path.join(args.bert_model_dir, "bert_model.ckpt"))
-    #     tf.compat.v1.logging.info('bert weights loaded')
 
     train_loss.update_state(loss)
     train_accuracy.update_state(tar_real, predictions)
@@ -308,7 +305,7 @@ def train_gec():
             train_dataset, dev_dataset = construct_datasets_gec(args, subwords_path)
         else:
             train_dataset, dev_dataset, = get_ids_dataset_tf_records(args)
-        # train_dataset, dev_dataset = construct_datatset_numpy(args)
+            train_dataset, dev_dataset = prepare_datasets(train_dataset, dev_dataset, args)
         
         for sents, seg in train_dataset.take(1):
             tf.compat.v1.logging.info('input shapes: {} {}'.format(sents.shape, seg.shape))
