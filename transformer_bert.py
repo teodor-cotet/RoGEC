@@ -46,11 +46,11 @@ tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from whe
 
 
 # paths for datasets  1k_clean_dirty_better.txt 30k_clean_dirty_better.txt 10_mil_dirty_clean_better.txt
-tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/30k_clean_dirty_better.txt', help='')
-tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/bert_30k_500',
+tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/10_mil_dirty_clean_better.txt', help='')
+tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/bert_multi_768_10m',
                 help='Checpoint save locations, or restore')
-tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/ro0_5x/', help='path from where to load bert')
-tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/transformer_256', help='path to tf records folder')
+tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/multi_cased_base/', help='path from where to load bert')
+tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/10m_bert_multi_768', help='path to tf records folder')
 
 # mode of execution
 """if bert is used, the decoder is still a transofrmer with transformer specific tokenization"""
@@ -62,17 +62,17 @@ tf.compat.v1.flags.DEFINE_bool('use_txt', default=False, help='dataset from txt 
 
 # model params
 tf.compat.v1.flags.DEFINE_integer('num_layers', default=6, help='')
-tf.compat.v1.flags.DEFINE_integer('d_model', default=256,
+tf.compat.v1.flags.DEFINE_integer('d_model', default=768,
                         help='d_model size is the out of the embeddings, it must match the bert model size, if you use one')
-tf.compat.v1.flags.DEFINE_integer('seq_length', default=256, help='same as d_model')
-tf.compat.v1.flags.DEFINE_integer('dff', default=256, help='')
+tf.compat.v1.flags.DEFINE_integer('seq_length', default=512, help='same as d_model')
+tf.compat.v1.flags.DEFINE_integer('dff', default=2048, help='')
 tf.compat.v1.flags.DEFINE_integer('num_heads', default=8, help='')
 tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
 tf.compat.v1.flags.DEFINE_integer('dict_size', default=(2**15), help='')
 tf.compat.v1.flags.DEFINE_integer('epochs', default=500, help='')
 tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(4 * 1024 * 1024), help='')
 tf.compat.v1.flags.DEFINE_integer('batch_size', default=256, help='')
-tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.7, help='')
+tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.97, help='')
 tf.compat.v1.flags.DEFINE_integer('total_samples', default=10000000, help='')
 tf.compat.v1.flags.DEFINE_bool('show_batch_stats', default=True, help='do prediction, decoding')
 
@@ -84,10 +84,16 @@ args = tf.compat.v1.flags.FLAGS
 if args.use_tpu:
     subwords_path = 'gs://' + args.bucket + '/' + args.checkpoint + '/corpora'
     checkpoint_path = 'gs://' + args.bucket + '/' + args.checkpoint
+    
 else:
     subwords_path = args.checkpoint + '/corpora'
     checkpoint_path = args.checkpoint
 
+if args.d_model == 258:
+    args.seq_length = 258 
+elif args.d_model == 768:
+    args.seq_length = 512 
+    
 tokenizer_pt, tokenizer_en, tokenizer_ro, tokenizer_bert = None, None, None, None
 transformer, optimizer, train_loss, train_accuracy = None, None, None, None
 eval_loss, eval_accuracy = None, None
