@@ -46,8 +46,8 @@ tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from whe
 
 
 # paths for datasets  1k_clean_dirty_better.txt 30k_clean_dirty_better.txt 10_mil_dirty_clean_better.txt
-tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/10_mil_dirty_clean_better.txt', help='')
-tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/bert_multi_768_10m',
+tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/30k_clean_dirty_better.txt', help='')
+tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/30k_transformer_64',
                 help='Checpoint save locations, or restore')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/multi_cased_base/', help='path from where to load bert')
 tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/10m_bert_multi_768', help='path to tf records folder')
@@ -105,6 +105,81 @@ train_step_signature_np = [tf.TensorSpec(shape=(None, None, None), dtype=tf.int6
 train_step_signature_mt = [tf.TensorSpec(shape=(None, None), dtype=tf.int64),
 tf.TensorSpec(shape=(None, None), dtype=tf.int64)]
 eval_step_signature = train_step_signature
+
+
+
+def generate_sentence_beam(inp_sentence: str):
+    global tokenizer_ro, tokenizer_bert, transformer, optimizer, args, subwords_path, checkpoint_path
+
+    if tokenizer_ro is None or (args.bert and tokenizer_bert is None):
+        tokenizer_ro, tokenizer_bert = get_tokenizers_ckeckpoint(args)
+
+    if transformer is None:
+        transformer, optimizer = get_model_gec()
+        if args.bert:
+            ckpt = tf.train.Checkpoint(decoder=transformer.decoder, final_layer=transformer.final_layer, optimizer=optimizer)
+        else:
+            ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
+        
+        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+        if ckpt_manager.latest_checkpoint:
+            # loading mechanis matches variables from the tf graph and resotres their values
+            ckpt.restore(ckpt_manager.latest_checkpoint)
+        else:
+            tf.compat.v1.logging.error('no checkpoints for transformers, aborting')
+            return None
+
+    if args.bert:
+        start_token = ['[CLS]']
+        end_token = ['[SEP]']
+        inp_sentence = tokenizer_bert.convert_tokens_to_ids(start_token + tokenizer_bert.tokenize(inp_sentence) + end_token)
+    else:
+        start_token = [tokenizer_ro.vocab_size]
+        end_token = [tokenizer_ro.vocab_size + 1]
+        inp_sentence = start_token + tokenizer_ro.encode(inp_sentence) + end_token
+    encoder_input = tf.expand_dims(inp_sentence, 0)
+
+    # as the target is english, the first word to the transformer should be the
+    # english start token.
+    decoder_input = [tokenizer_ro.vocab_size]
+    output = tf.expand_dims(decoder_input, 0)
+
+    for i in range(args.seq_length):
+        enc_padding_mask, combined_mask, dec_padding_mask = create_masks(
+            encoder_input, output)
+
+        # predictions.shape == (batch_size, seq_len, vocab_size)
+        if args.bert:
+            inp_seg = tf.zeros(shape=encoder_input.shape, dtype=tf.dtypes.int64)
+            predictions, attention_weights = transformer(encoder_input, inp_seg, 
+                                                            output,
+                                                            False,
+                                                            enc_padding_mask,
+                                                            combined_mask,
+                                                            dec_padding_mask)
+        else:
+            predictions, attention_weights = transformer(encoder_input, 
+                                                            output,
+                                                            False,
+                                                            enc_padding_mask,
+                                                            combined_mask,
+                                                            dec_padding_mask)
+
+        # select the last word from the seq_len dimension
+        predictions = predictions[: ,-1:, :]  # (batch_size, 1, vocab_size)
+
+        predicted_id = tf.cast(tf.argmax(predictions, axis=-1), tf.int32)
+
+        # return the result if the predicted_id is equal to the end token
+        if predicted_id == tokenizer_ro.vocab_size + 1:
+            return tf.squeeze(output, axis=0), attention_weights
+
+        # concatentate the predicted_id to the output which is given to the decoder
+        # as its input.
+        output = tf.concat([output, predicted_id], axis=-1)
+
+    return tf.squeeze(output, axis=0), attention_weights
+
 
 def generate_sentence(inp_sentence: str):
     global tokenizer_ro, tokenizer_bert, transformer, optimizer, args, subwords_path, checkpoint_path
@@ -429,7 +504,7 @@ def test_bert_trans():
 
 def run_main():
     if args.records:
-        construct_tf_records(args, subwords_path)
+        # construct_tf_records(args, subwords_path)
 
         train_tf_records = os.path.join(args.tf_records, 'train.tfrecord')
         dev_tf_records = os.path.join(args.tf_records, 'dev.tfrecord')
