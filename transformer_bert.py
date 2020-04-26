@@ -13,6 +13,7 @@ import tensorflow as tf
 from absl import app as absl_app
 from bert.tokenization.bert_tokenization import FullTokenizer
 import bert
+from collections import namedtuple
 
 from transformer.dataset import construct_datasets_gec, construct_tokenizer,\
         construct_datatset_numpy, prepare_datasets, construct_tf_records
@@ -22,6 +23,7 @@ from transformer.transformer import Transformer
 from transformer.transformer_scheduler import CustomSchedule
 from transformer.serialization import get_ids_dataset_tf_records, upload_blob,\
                                         get_tokenizers_ckeckpoint
+import beam_search
 
 
 # TPU cloud params
@@ -76,6 +78,8 @@ tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.97, help='')
 tf.compat.v1.flags.DEFINE_integer('total_samples', default=10000000, help='')
 tf.compat.v1.flags.DEFINE_bool('show_batch_stats', default=True, help='do prediction, decoding')
 
+# deconding
+tf.compat.v1.flags.DEFINE_integer('beam', default=10, help='beam width')
 # for prediction purposes only
 tf.compat.v1.flags.DEFINE_string('in_file_decode', default='corpora/cna/dev_old/small_decode_test.txt', help='')
 tf.compat.v1.flags.DEFINE_string('out_file_decode', default='corpora/cna/dev_old/small_decode_test_predicted.txt', help='')
@@ -89,10 +93,17 @@ else:
     subwords_path = args.checkpoint + '/corpora'
     checkpoint_path = args.checkpoint
 
-if args.d_model == 258:
+if args.d_model == 64:
+    args.seq_length = 64
+    args.dff = 64
+    args.num_heads = 2
+    args.num_layers = 2
+    args.dict_size = 1024
+elif args.d_model == 258:
     args.seq_length = 258 
 elif args.d_model == 768:
     args.seq_length = 512 
+
     
 tokenizer_pt, tokenizer_en, tokenizer_ro, tokenizer_bert = None, None, None, None
 transformer, optimizer, train_loss, train_accuracy = None, None, None, None
@@ -107,6 +118,32 @@ tf.TensorSpec(shape=(None, None), dtype=tf.int64)]
 eval_step_signature = train_step_signature
 
 
+def init_beam(vocab_size, end_token_id, beam_width=1):
+    config = beam_search.BeamSearchConfig(
+        beam_width=beam_width,
+        vocab_size=vocab_size,
+        eos_token=end_token_id,
+        length_penalty_weight=0.0,
+        choose_successors_fn=beam_search.choose_top_k)
+
+    beam_state = beam_search.BeamSearchState(
+        log_probs=tf.nn.log_softmax(tf.ones(config.beam_width)),
+        lengths=tf.constant(
+            1, shape=[config.beam_width], dtype=tf.int32),
+        finished=tf.zeros(
+            [config.beam_width], dtype=tf.bool))
+    return config, beam_state
+
+class Beam(
+    namedtuple("Beam", ["log_prob", "ids", "length"])):
+  """A finished beam
+
+  Args:
+    probs: Log probability of them beam
+    finished: List of ids of the the beam
+    lengths: Length of the beam
+  """
+  pass
 
 def generate_sentence_beam(inp_sentence: str):
     global tokenizer_ro, tokenizer_bert, transformer, optimizer, args, subwords_path, checkpoint_path
@@ -130,19 +167,28 @@ def generate_sentence_beam(inp_sentence: str):
             return None
 
     if args.bert:
-        start_token = ['[CLS]']
-        end_token = ['[SEP]']
+        start_token, end_token = ['[CLS]'], ['[SEP]']
         inp_sentence = tokenizer_bert.convert_tokens_to_ids(start_token + tokenizer_bert.tokenize(inp_sentence) + end_token)
+        start_token_id = tokenizer_bert.convert_tokens_to_ids(start_token)[0]
+        end_token_id = tokenizer_bert.convert_tokens_to_ids(end_token)[0]
     else:
-        start_token = [tokenizer_ro.vocab_size]
-        end_token = [tokenizer_ro.vocab_size + 1]
+        start_token, end_token = [tokenizer_ro.vocab_size], [tokenizer_ro.vocab_size + 1]
         inp_sentence = start_token + tokenizer_ro.encode(inp_sentence) + end_token
-    encoder_input = tf.expand_dims(inp_sentence, 0)
+        start_token_id, end_token_id = tokenizer_ro.vocab_size, tokenizer_ro.vocab_size + 1
 
-    # as the target is english, the first word to the transformer should be the
-    # english start token.
-    decoder_input = [tokenizer_ro.vocab_size]
-    output = tf.expand_dims(decoder_input, 0)
+    # duplicate x beam_width == batch size
+    encoder_input = tf.expand_dims(inp_sentence, 0)
+    encoder_input = tf.tile(encoder_input, [args.beam, 1])
+
+    decoder_input = [start_token_id] * args.beam
+    output = tf.expand_dims(decoder_input, 1) # for batch size == beam_wisth
+
+    # beam search init 
+    config, beam_state = init_beam(vocab_size=(args.dict_size + 2),
+                                                end_token_id=end_token_id, 
+                                                beam_width=args.beam)
+    beam_values = tf.constant(start_token_id, shape=(1, args.beam))
+    beam_parents = tf.zeros((2, args.beam), dtype=tf.int32)
 
     for i in range(args.seq_length):
         enc_padding_mask, combined_mask, dec_padding_mask = create_masks(
@@ -164,22 +210,35 @@ def generate_sentence_beam(inp_sentence: str):
                                                             enc_padding_mask,
                                                             combined_mask,
                                                             dec_padding_mask)
+        # !preeidctions.shape == (batch_size, i, vocab_size) (predicts a softmax for each existing word!)
+        beam_pred = tf.squeeze(predictions[: ,-1:, :], 1)  # (batch_size, 1, vocab_size), select only the last word
+        bs_output, beam_state = beam_search.beam_search_step(
+            time_=i,
+            logits=beam_pred,
+            beam_state=beam_state,
+            config=config)
 
-        # select the last word from the seq_len dimension
-        predictions = predictions[: ,-1:, :]  # (batch_size, 1, vocab_size)
+        # output.shape beams x i, pred.shape beams x 1
+        # add new predictions to the beams decoder
+        # print(bs_output.predicted_ids)
+        bs_output_predicted_ids = tf.expand_dims(bs_output.predicted_ids, axis=0)
+        beam_values = tf.concat([beam_values, bs_output_predicted_ids], axis=0)
+        res = tf.cast(beam_search.gather_tree_py(beam_values.numpy(), beam_parents.numpy()), dtype=tf.int32)
+        output = tf.transpose(res)
 
-        predicted_id = tf.cast(tf.argmax(predictions, axis=-1), tf.int32)
+        bs_output_beam_parent_ids = tf.expand_dims(bs_output.beam_parent_ids, axis=0)
+        beam_parents = tf.concat([beam_parents, bs_output_beam_parent_ids], axis=0)
 
-        # return the result if the predicted_id is equal to the end token
-        if predicted_id == tokenizer_ro.vocab_size + 1:
-            return tf.squeeze(output, axis=0), attention_weights
+        all_finished = tf.reduce_all(beam_state.finished) # and
+        if all_finished:
+            break
 
-        # concatentate the predicted_id to the output which is given to the decoder
-        # as its input.
-        output = tf.concat([output, predicted_id], axis=-1)
+    beams = []
+    for i, out in enumerate(output):
+        b = Beam(log_prob=beam_state.log_probs[i].numpy(), ids=out.numpy(), length=len(out.numpy()))
+        beams.append(b)
 
-    return tf.squeeze(output, axis=0), attention_weights
-
+    return beams, attention_weights # return one of them
 
 def generate_sentence(inp_sentence: str):
     global tokenizer_ro, tokenizer_bert, transformer, optimizer, args, subwords_path, checkpoint_path
@@ -258,7 +317,6 @@ def correct_from_file(in_file: str, out_file: str):
         for line in fin:
             predicted_sentences = correct_gec(line)
             tf.compat.v1.logging.info('original: {}'.format(line))
-            tf.compat.v1.logging.info('predicted: {}'.format(predicted_sentences))
 
             if args.use_tpu == False:
                 fout.write(predicted_sentences + '\n')
@@ -266,10 +324,11 @@ def correct_from_file(in_file: str, out_file: str):
 
 def correct_gec(sentence: str, plot=''):
     global tokenizer_ro
-    result, attention_weights = generate_sentence(sentence)
-    predicted_sentence = tokenizer_ro.decode([i for i in result 
-                                                if i < tokenizer_ro.vocab_size])  
-    
+    beams, attention_weights = generate_sentence_beam(sentence)
+    for beam in beams:
+        predicted_sentence = tokenizer_ro.decode([i for i in beam.ids 
+                                                    if i < tokenizer_ro.vocab_size])  
+        tf.compat.v1.logging.info('predicted: {} prob: {}'.format(predicted_sentence, beam.log_prob))
     return predicted_sentence
      
 def get_model_gec():
@@ -504,7 +563,7 @@ def test_bert_trans():
 
 def run_main():
     if args.records:
-        # construct_tf_records(args, subwords_path)
+        construct_tf_records(args, subwords_path)
 
         train_tf_records = os.path.join(args.tf_records, 'train.tfrecord')
         dev_tf_records = os.path.join(args.tf_records, 'dev.tfrecord')
