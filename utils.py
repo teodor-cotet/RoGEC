@@ -1,4 +1,4 @@
-
+from collections import namedtuple
 correct_diacs = {
     "ş": "ș",
     "Ş": "Ș",
@@ -7,5 +7,4 @@ correct_diacs = {
 }
 
 def clean_diacs(s: str):
-
     return "".join([correct_diacs[c] if c in correct_diacs else c for c in list(s)])

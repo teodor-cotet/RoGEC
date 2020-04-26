@@ -34,8 +34,18 @@ def point_repl(matchobj) -> str:
     return matchobj.group(1) + '. '
 
 """ detokenizer for romanian """
-def reconstruct_sentence(sent: List[str]) -> str:
+def reconstruct_sentence(sent: List[str], eliminate=None) -> str:
     global detokenizer
+    if detokenizer is None:
+        detokenizer = Detok()
+    if eliminate is not None:
+        for el in eliminate:
+            while True:
+                try:
+                    sent.remove(el)
+                except ValueError:
+                    break
+                
     text = detokenizer.detokenize(sent)
     text = re.sub(r'(")\s+(.*?)\s+(")', quote_repl, text)
     text = re.sub(r'(«)\s+(.*?)\s+(»)', quote_repl, text)

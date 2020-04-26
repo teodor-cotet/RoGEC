@@ -53,6 +53,7 @@ tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/30k_transfor
                 help='Checpoint save locations, or restore')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/multi_cased_base/', help='path from where to load bert')
 tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/10m_bert_multi_768', help='path to tf records folder')
+tf.compat.v1.flags.DEFINE_string('info', default='info.log', help='path to tf info file')
 
 # mode of execution
 """if bert is used, the decoder is still a transofrmer with transformer specific tokenization"""
@@ -80,18 +81,24 @@ tf.compat.v1.flags.DEFINE_bool('show_batch_stats', default=True, help='do predic
 
 # deconding
 tf.compat.v1.flags.DEFINE_integer('beam', default=10, help='beam width')
+tf.compat.v1.flags.DEFINE_integer('max_seq_decoding', default=768, help='mqx length of the decoding sequence')
+
 # for prediction purposes only
 tf.compat.v1.flags.DEFINE_string('in_file_decode', default='corpora/cna/dev_old/small_decode_test.txt', help='')
 tf.compat.v1.flags.DEFINE_string('out_file_decode', default='corpora/cna/dev_old/small_decode_test_predicted.txt', help='')
+
+# dummy values
+tf.compat.v1.flags.DEFINE_string('subwords_path', default='', help='path to subwords path')
+tf.compat.v1.flags.DEFINE_string('checkpoint_path', default='', help='path to checkpoint')
+
 args = tf.compat.v1.flags.FLAGS
 
 if args.use_tpu:
-    subwords_path = 'gs://' + args.bucket + '/' + args.checkpoint + '/corpora'
-    checkpoint_path = 'gs://' + args.bucket + '/' + args.checkpoint
-    
+    args.subwords_path = os.path.join('gs://', args.bucket, args.checkpoint, 'corpora')
+    args.checkpoint_path = os.path.join('gs://', args.bucket, args.checkpoint)
 else:
-    subwords_path = args.checkpoint + '/corpora'
-    checkpoint_path = args.checkpoint
+    args.subwords_path = os.path.join(args.checkpoint, 'corpora')
+    args.checkpoint_path = args.checkpoint
 
 if args.d_model == 64:
     args.seq_length = 64
@@ -111,12 +118,37 @@ eval_loss, eval_accuracy = None, None
 strategy = None
 train_step_signature = [tf.TensorSpec(shape=(None, 2, args.seq_length), dtype=tf.int64),
     tf.TensorSpec(shape=(None, args.seq_length), dtype=tf.int64)]
-train_step_signature_np = [tf.TensorSpec(shape=(None, None, None), dtype=tf.int64),
-    tf.TensorSpec(shape=(None, None), dtype=tf.int64)]
-train_step_signature_mt = [tf.TensorSpec(shape=(None, None), dtype=tf.int64),
-tf.TensorSpec(shape=(None, None), dtype=tf.int64)]
 eval_step_signature = train_step_signature
 
+
+class Beam(namedtuple("Beam", ["log_prob", "ids", "length"])):
+  """A finished beam
+
+  Args:
+    probs: Log probability of them beam
+    finished: List of ids of the the beam
+    lengths: Length of the beam
+  """
+  pass
+
+def correct_from_file(in_file: str, out_file: str):
+    with open(in_file, 'r') as fin, open(out_file, 'w') as fout:
+        for line in fin:
+            predicted_sentences = correct_gec(line)
+            tf.compat.v1.logging.info('original: {}'.format(line))
+
+            if args.use_tpu == False:
+                fout.write(predicted_sentences + '\n')
+                fout.flush()
+
+def correct_gec(sentence: str, plot=''):
+    global tokenizer_ro
+    beams, attention_weights = generate_sentence_beam(sentence)
+    for beam in beams:
+        predicted_sentence = tokenizer_ro.decode([i for i in beam.ids 
+                                                    if i < tokenizer_ro.vocab_size])  
+        tf.compat.v1.logging.info('predicted: {} prob: {}'.format(predicted_sentence, beam.log_prob))
+    return predicted_sentence
 
 def init_beam(vocab_size, end_token_id, beam_width=1):
     config = beam_search.BeamSearchConfig(
@@ -134,19 +166,8 @@ def init_beam(vocab_size, end_token_id, beam_width=1):
             [config.beam_width], dtype=tf.bool))
     return config, beam_state
 
-class Beam(
-    namedtuple("Beam", ["log_prob", "ids", "length"])):
-  """A finished beam
-
-  Args:
-    probs: Log probability of them beam
-    finished: List of ids of the the beam
-    lengths: Length of the beam
-  """
-  pass
-
 def generate_sentence_beam(inp_sentence: str):
-    global tokenizer_ro, tokenizer_bert, transformer, optimizer, args, subwords_path, checkpoint_path
+    global tokenizer_ro, tokenizer_bert, transformer, optimizer, args
 
     if tokenizer_ro is None or (args.bert and tokenizer_bert is None):
         tokenizer_ro, tokenizer_bert = get_tokenizers_ckeckpoint(args)
@@ -154,11 +175,12 @@ def generate_sentence_beam(inp_sentence: str):
     if transformer is None:
         transformer, optimizer = get_model_gec()
         if args.bert:
-            ckpt = tf.train.Checkpoint(decoder=transformer.decoder, final_layer=transformer.final_layer, optimizer=optimizer)
+            ckpt = tf.train.Checkpoint(decoder=transformer.decoder, 
+                final_layer=transformer.final_layer, optimizer=optimizer)
         else:
             ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
         
-        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+        ckpt_manager = tf.train.CheckpointManager(ckpt, args.checkpoint_path, max_to_keep=5)
         if ckpt_manager.latest_checkpoint:
             # loading mechanis matches variables from the tf graph and resotres their values
             ckpt.restore(ckpt_manager.latest_checkpoint)
@@ -168,7 +190,8 @@ def generate_sentence_beam(inp_sentence: str):
 
     if args.bert:
         start_token, end_token = ['[CLS]'], ['[SEP]']
-        inp_sentence = tokenizer_bert.convert_tokens_to_ids(start_token + tokenizer_bert.tokenize(inp_sentence) + end_token)
+        inp_sentence = tokenizer_bert.convert_tokens_to_ids(start_token +
+             tokenizer_bert.tokenize(inp_sentence) + end_token)
         start_token_id = tokenizer_bert.convert_tokens_to_ids(start_token)[0]
         end_token_id = tokenizer_bert.convert_tokens_to_ids(end_token)[0]
     else:
@@ -190,37 +213,25 @@ def generate_sentence_beam(inp_sentence: str):
     beam_values = tf.constant(start_token_id, shape=(1, args.beam))
     beam_parents = tf.zeros((2, args.beam), dtype=tf.int32)
 
-    for i in range(args.seq_length):
+    for i in range(args.max_seq_decoding):
         enc_padding_mask, combined_mask, dec_padding_mask = create_masks(
             encoder_input, output)
 
-        # predictions.shape == (batch_size, seq_len, vocab_size)
         if args.bert:
             inp_seg = tf.zeros(shape=encoder_input.shape, dtype=tf.dtypes.int64)
-            predictions, attention_weights = transformer(encoder_input, inp_seg, 
-                                                            output,
-                                                            False,
-                                                            enc_padding_mask,
-                                                            combined_mask,
-                                                            dec_padding_mask)
+            predictions, attention_weights = transformer(encoder_input, inp_seg, output,
+                                                        False, enc_padding_mask, combined_mask,
+                                                        dec_padding_mask)
         else:
-            predictions, attention_weights = transformer(encoder_input, 
-                                                            output,
-                                                            False,
-                                                            enc_padding_mask,
-                                                            combined_mask,
-                                                            dec_padding_mask)
-        # !preeidctions.shape == (batch_size, i, vocab_size) (predicts a softmax for each existing word!)
+            predictions, attention_weights = transformer(encoder_input, output,
+                                                            False, enc_padding_mask,
+                                                            combined_mask, dec_padding_mask)
+        # !predictions.shape == (batch_size, i, vocab_size) (predicts a softmax for each existing word!)
         beam_pred = tf.squeeze(predictions[: ,-1:, :], 1)  # (batch_size, 1, vocab_size), select only the last word
-        bs_output, beam_state = beam_search.beam_search_step(
-            time_=i,
-            logits=beam_pred,
-            beam_state=beam_state,
-            config=config)
+        bs_output, beam_state = beam_search.beam_search_step(time_=i, logits=beam_pred,
+                                                             beam_state=beam_state, config=config)
 
-        # output.shape beams x i, pred.shape beams x 1
         # add new predictions to the beams decoder
-        # print(bs_output.predicted_ids)
         bs_output_predicted_ids = tf.expand_dims(bs_output.predicted_ids, axis=0)
         beam_values = tf.concat([beam_values, bs_output_predicted_ids], axis=0)
         res = tf.cast(beam_search.gather_tree_py(beam_values.numpy(), beam_parents.numpy()), dtype=tf.int32)
@@ -230,8 +241,7 @@ def generate_sentence_beam(inp_sentence: str):
         beam_parents = tf.concat([beam_parents, bs_output_beam_parent_ids], axis=0)
 
         all_finished = tf.reduce_all(beam_state.finished) # and
-        if all_finished:
-            break
+        if all_finished:    break
 
     beams = []
     for i, out in enumerate(output):
@@ -240,97 +250,6 @@ def generate_sentence_beam(inp_sentence: str):
 
     return beams, attention_weights # return one of them
 
-def generate_sentence(inp_sentence: str):
-    global tokenizer_ro, tokenizer_bert, transformer, optimizer, args, subwords_path, checkpoint_path
-
-    if tokenizer_ro is None or (args.bert and tokenizer_bert is None):
-        tokenizer_ro, tokenizer_bert = get_tokenizers_ckeckpoint(args)
-
-    if transformer is None:
-        transformer, optimizer = get_model_gec()
-        if args.bert:
-            ckpt = tf.train.Checkpoint(decoder=transformer.decoder, final_layer=transformer.final_layer, optimizer=optimizer)
-        else:
-            ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
-        
-        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
-        if ckpt_manager.latest_checkpoint:
-            # loading mechanis matches variables from the tf graph and resotres their values
-            ckpt.restore(ckpt_manager.latest_checkpoint)
-        else:
-            tf.compat.v1.logging.error('no checkpoints for transformers, aborting')
-            return None
-
-    if args.bert:
-        start_token = ['[CLS]']
-        end_token = ['[SEP]']
-        inp_sentence = tokenizer_bert.convert_tokens_to_ids(start_token + tokenizer_bert.tokenize(inp_sentence) + end_token)
-    else:
-        start_token = [tokenizer_ro.vocab_size]
-        end_token = [tokenizer_ro.vocab_size + 1]
-        inp_sentence = start_token + tokenizer_ro.encode(inp_sentence) + end_token
-    encoder_input = tf.expand_dims(inp_sentence, 0)
-
-    # as the target is english, the first word to the transformer should be the
-    # english start token.
-    decoder_input = [tokenizer_ro.vocab_size]
-    output = tf.expand_dims(decoder_input, 0)
-
-    for i in range(args.seq_length):
-        enc_padding_mask, combined_mask, dec_padding_mask = create_masks(
-            encoder_input, output)
-
-        # predictions.shape == (batch_size, seq_len, vocab_size)
-        if args.bert:
-            inp_seg = tf.zeros(shape=encoder_input.shape, dtype=tf.dtypes.int64)
-            predictions, attention_weights = transformer(encoder_input, inp_seg, 
-                                                            output,
-                                                            False,
-                                                            enc_padding_mask,
-                                                            combined_mask,
-                                                            dec_padding_mask)
-        else:
-            predictions, attention_weights = transformer(encoder_input, 
-                                                            output,
-                                                            False,
-                                                            enc_padding_mask,
-                                                            combined_mask,
-                                                            dec_padding_mask)
-
-        # select the last word from the seq_len dimension
-        predictions = predictions[: ,-1:, :]  # (batch_size, 1, vocab_size)
-
-        predicted_id = tf.cast(tf.argmax(predictions, axis=-1), tf.int32)
-
-        # return the result if the predicted_id is equal to the end token
-        if predicted_id == tokenizer_ro.vocab_size + 1:
-            return tf.squeeze(output, axis=0), attention_weights
-
-        # concatentate the predicted_id to the output which is given to the decoder
-        # as its input.
-        output = tf.concat([output, predicted_id], axis=-1)
-
-    return tf.squeeze(output, axis=0), attention_weights
-
-def correct_from_file(in_file: str, out_file: str):
-    with open(in_file, 'r') as fin, open(out_file, 'w') as fout:
-        for line in fin:
-            predicted_sentences = correct_gec(line)
-            tf.compat.v1.logging.info('original: {}'.format(line))
-
-            if args.use_tpu == False:
-                fout.write(predicted_sentences + '\n')
-                fout.flush()
-
-def correct_gec(sentence: str, plot=''):
-    global tokenizer_ro
-    beams, attention_weights = generate_sentence_beam(sentence)
-    for beam in beams:
-        predicted_sentence = tokenizer_ro.decode([i for i in beam.ids 
-                                                    if i < tokenizer_ro.vocab_size])  
-        tf.compat.v1.logging.info('predicted: {} prob: {}'.format(predicted_sentence, beam.log_prob))
-    return predicted_sentence
-     
 def get_model_gec():
     global args, transformer, tokenizer_ro
 
@@ -436,20 +355,34 @@ def distributed_eval_step(dataset_inputs):
     data, segs = dataset_inputs
     return strategy.experimental_run_v2(eval_step, args=(data, segs))
 
+def print_stats(args, epoch, stage, batch_idx, loss, acc, log):
+    if batch_idx is not None:
+        if args.show_batch_stats and (batch_idx + 1) % 100000 == 0:
+            tf.compat.v1.logging.info('{} - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
+                                stage, epoch + 1, batch_idx, loss, acc))
+            log.write('{} - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
+                                stage, epoch + 1, batch_idx, loss, acc))
+            log.flush()
+    else:
+        tf.compat.v1.logging.info('Final {} - epoch {} loss {:.4f} accuracy {:.4f}'.format(
+                                        stage, epoch + 1, loss, acc))
+        log.write('Final {} - epoch {} loss {:.4f} accuracy {:.4f} \n'.format(
+                            stage, epoch + 1, loss, acc))
+        log.flush()
+
 def train_gec():
-    global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy, strategy, checkpoint_path
+    global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy, strategy
     
-    with open('info.log', 'wt') as log:
+    with open(args.info, 'wt') as log:
         
         if args.use_txt:
-            train_dataset, dev_dataset = construct_datasets_gec(args, subwords_path)
+            train_dataset, dev_dataset = construct_datasets_gec(args, args.subwords_path)
         else:
             train_dataset, dev_dataset, = get_ids_dataset_tf_records(args)
             train_dataset, dev_dataset = prepare_datasets(train_dataset, dev_dataset, args)
         
         for sents, seg in train_dataset.take(1):
             tf.compat.v1.logging.info('input shapes: {} {}'.format(sents.shape, seg.shape))
-            # tf.compat.v1.logging.info('input: {} {}'.format(sents, seg))
 
         if args.use_tpu:
            train_dataset = strategy.experimental_distribute_dataset(train_dataset)
@@ -469,11 +402,11 @@ def train_gec():
         else:
             ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
        
-        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+        ckpt_manager = tf.train.CheckpointManager(ckpt, args.checkpoint_path, max_to_keep=5)
         if ckpt_manager.latest_checkpoint:
             # loading mechanis matches variables from the tf graph and resotres their values
             ckpt.restore(ckpt_manager.latest_checkpoint)
-            tf.compat.v1.logging.info('latest checkpoint restored {}'.format(checkpoint_path))
+            tf.compat.v1.logging.info('latest checkpoint restored {}'.format(args.checkpoint_path))
 
         tf.compat.v1.logging.info('starting training...')
         for epoch in range(args.epochs):
@@ -483,6 +416,7 @@ def train_gec():
             eval_loss.reset_states()
             eval_accuracy.reset_states()
 
+            # train 
             for batch_idx, data in enumerate(train_dataset):
                 
                 if args.use_tpu:
@@ -490,26 +424,19 @@ def train_gec():
                 else:
                     data, inp_seg = data
                     train_step(data, inp_seg)
-                if args.show_batch_stats and (batch_idx + 1) % 100000 == 0:
-                    tf.compat.v1.logging.info('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
-                        epoch + 1, batch_idx, train_loss.result(), train_accuracy.result()))
-                    log.write('train - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
-                        epoch + 1, batch_idx, train_loss.result(), train_accuracy.result()))
-                    log.flush()
+
+                print_stats(args, epoch=epoch, stage='train', batch_idx=batch_idx,
+                             loss=train_loss.result(), acc=train_accuracy.result(), log=log)
+
+            print_stats(args, epoch=epoch, stage='train', batch_idx=None, 
+                            loss=train_loss.result(), acc=train_accuracy.result(), log=log)
 
             if (epoch + 1) % 2 == 0:
                 ckpt_save_path = ckpt_manager.save()
                 log.write('Saving checkpoint for epoch {} at {} \n'.format(epoch+1,
                                                                     ckpt_save_path))
                 log.flush()
-            
-            tf.compat.v1.logging.info('Final train - epoch {} loss {:.4f} accuracy {:.4f}'.format(epoch + 1, 
-                                                            train_loss.result(), 
-                                                            train_accuracy.result()))
-            log.write('Final train - epoch {} loss {:.4f} accuracy {:.4f} \n'.format(epoch + 1, 
-                                                            train_loss.result(), 
-                                                            train_accuracy.result()))
-            log.flush()
+
             # eval
             for batch_idx, data in enumerate(dev_dataset):
                 
@@ -519,18 +446,11 @@ def train_gec():
                     data, inp_seg = data
                     eval_step(data, inp_seg)
 
-                if args.show_batch_stats and (batch_idx + 1) % 100000 == 0:
-                    tf.compat.v1.logging.info('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}'.format(
-                        epoch + 1, batch_idx, eval_loss.result(), eval_accuracy.result()))
-                    log.write('Dev - epoch {} batch {} loss {:.4f} accuracy {:.4f}\n'.format(
-                        epoch + 1, batch_idx, eval_loss.result(), eval_accuracy.result()))
-                    log.flush()
-                    
-            tf.compat.v1.logging.info('Final dev - epoch {} loss {:.4f} accuracy {:.4f}'.format(
-                        epoch + 1, eval_loss.result(), eval_accuracy.result()))
-            log.write('Final dev - epoch {} loss {:.4f} accuracy {:.4f}\n'.format(
-                        epoch + 1, eval_loss.result(), eval_accuracy.result()))
-            log.flush()
+                print_stats(args, epoch=epoch, stage='dev', batch_idx=batch_idx, 
+                            loss=eval_loss.result(), acc=eval_accuracy.result(), log=log)
+            
+            print_stats(args, epoch=epoch, stage='dev', batch_idx=None, 
+                            loss=eval_loss.result(), acc=eval_accuracy.result(), log=log)
 
 def test_bert_trans():
     if args.bert is True:
@@ -563,7 +483,7 @@ def test_bert_trans():
 
 def run_main():
     if args.records:
-        construct_tf_records(args, subwords_path)
+        construct_tf_records(args, args.subwords_path)
 
         train_tf_records = os.path.join(args.tf_records, 'train.tfrecord')
         dev_tf_records = os.path.join(args.tf_records, 'dev.tfrecord')

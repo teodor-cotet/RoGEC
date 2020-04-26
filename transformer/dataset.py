@@ -12,6 +12,10 @@ from transformer.serialization import serialize_ids_dataset
 
 args, tokenizer_ro, tokenizer_bert = None, None, None
 
+train_step_signature_np = [tf.TensorSpec(shape=(None, None, None), dtype=tf.int64),
+    tf.TensorSpec(shape=(None, None), dtype=tf.int64)]
+
+
 def construct_flat_datasets(args1, subwords_path):
     global tokenizer_bert, tokenizer_ro, args
 
@@ -70,7 +74,7 @@ def construct_tf_records(args1, subwords_path=None):
     tokenizer_bert_path = os.path.join(args1.tf_records, 'tokenizer_bert.vocab')
 
     tokenizer_ro.save_to_file(tokenizer_ro_path)
-    vocab_file_source = args1.bert_model_dir + "vocab.vocab"
+    vocab_file_source = join(args1.bert_model_dir, "vocab.vocab")
     if args1.bert:
         copyfile(vocab_file_source, tokenizer_bert_path)
     
@@ -93,11 +97,6 @@ def construct_datatset_numpy(args1):
     args = args1
     data1 = tf.random.uniform((15000, 2, 256), maxval=128, dtype=tf.dtypes.int64)
     segs = tf.zeros((15000, 256), dtype=tf.dtypes.int64)
-    # data1 = np.random.randint(100, size=(1024, 128))
-    #data1 = tf.convert_to_tensor(data1, dtype=tf.int64)
-
-    # data2 = np.random.randint(100, size=(1024, 128))
-    # data2 = tf.convert_to_tensor(data2, dtype=tf.int64)
 
     train_dataset = tf.data.Dataset.from_tensor_slices((data1, segs))
     val_dataset = tf.data.Dataset.from_tensor_slices((data1, segs))
@@ -156,8 +155,6 @@ def encode_gec(source: str, target: str, tokenizer_ro, tokenizer_bert, args):
         tokens.extend(tokenizer_bert.tokenize(source))
         tokens.append('[SEP]')
         source = tokenizer_bert.convert_tokens_to_ids(tokens)
-        # target = [tokenizer_bert.vocab_size] + tokenizer_bert.convert_tokens_to_ids(tokenizer_bert.tokenize(target)) +\
-        #         [tokenizer_bert.vocab_size + 1]
     else:
         source = [tokenizer_ro.vocab_size] + tokenizer_ro.encode(source) +\
             [tokenizer_ro.vocab_size + 1]
