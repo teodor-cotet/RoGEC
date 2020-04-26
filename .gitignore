@@ -28,8 +28,11 @@ t2t/gec_ro/*
 !t2t/gec_ro/gec_ro.py
 !t2t/gec_ro/decode_this_sample.txt
 !t2t/set_up_colab.sh
+!t2t/transformer_base_1gpu.sh
 
 models/**
 test.py
 papers/*
 m2scorer/**
+bert/**
+seq2seq/**
