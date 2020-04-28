@@ -51,7 +51,7 @@ tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from whe
 tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/30k_clean_dirty_better.txt', help='')
 tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/30k_transformer_64',
                 help='Checpoint save locations, or restore')
-tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/multi_cased_base/', help='path from where to load bert')
+tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/bert_ro_256/', help='path from where to load bert')
 tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/10m_bert_multi_768', help='path to tf records folder')
 tf.compat.v1.flags.DEFINE_string('info', default='info.log', help='path to tf info file')
 
@@ -79,9 +79,13 @@ tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.97, help='')
 tf.compat.v1.flags.DEFINE_integer('total_samples', default=10000000, help='')
 tf.compat.v1.flags.DEFINE_bool('show_batch_stats', default=True, help='do prediction, decoding')
 
-# deconding
-tf.compat.v1.flags.DEFINE_integer('beam', default=10, help='beam width')
-tf.compat.v1.flags.DEFINE_integer('max_seq_decoding', default=768, help='mqx length of the decoding sequence')
+# deconding 100k_wiki_clean.arpa 30m_wiki_clean.arpa
+tf.compat.v1.flags.DEFINE_integer('beam', default=4, help='beam width')
+tf.compat.v1.flags.DEFINE_integer('max_seq_decoding', default=768, help='max length of the decoding sequence')
+tf.compat.v1.flags.DEFINE_string('lm_path', default='/media/teo/drive hdd/gec/corpora/wiki_synthetic/arpa/100k_wiki_clean.arpa', 
+            help='path to the the the language model arpa file')
+tf.compat.v1.flags.DEFINE_bool('normalize', default=False, help='normalize reranking by sentence length')
+tf.compat.v1.flags.DEFINE_float('weight_lm', default=1., help='weight of the LM in decoding (should be in [0, 2])')
 
 # for prediction purposes only
 tf.compat.v1.flags.DEFINE_string('in_file_decode', default='corpora/cna/dev_old/small_decode_test.txt', help='')
@@ -100,20 +104,24 @@ else:
     args.subwords_path = os.path.join(args.checkpoint, 'corpora')
     args.checkpoint_path = args.checkpoint
 
+
 if args.d_model == 64:
     args.seq_length = 64
     args.dff = 64
     args.num_heads = 2
     args.num_layers = 2
     args.dict_size = 1024
-elif args.d_model == 258:
-    args.seq_length = 258 
+elif args.d_model == 256:
+    args.seq_length = 256 
 elif args.d_model == 768:
-    args.seq_length = 512 
+    args.seq_length = 512
 
+if args.decode_mode:
+    args.batch_size = args.beam
     
 tokenizer_pt, tokenizer_en, tokenizer_ro, tokenizer_bert = None, None, None, None
 transformer, optimizer, train_loss, train_accuracy = None, None, None, None
+lm_model = None
 eval_loss, eval_accuracy = None, None
 strategy = None
 train_step_signature = [tf.TensorSpec(shape=(None, 2, args.seq_length), dtype=tf.int64),
@@ -134,28 +142,41 @@ class Beam(namedtuple("Beam", ["log_prob", "ids", "length"])):
 def correct_from_file(in_file: str, out_file: str):
     with open(in_file, 'r') as fin, open(out_file, 'w') as fout:
         for line in fin:
+            print('original: {}'.format(line))
             predicted_sentences = correct_gec(line)
-            tf.compat.v1.logging.info('original: {}'.format(line))
-
-            if args.use_tpu == False:
-                fout.write(predicted_sentences + '\n')
-                fout.flush()
 
 def correct_gec(sentence: str, plot=''):
-    global tokenizer_ro
+    global tokenizer_ro, lm_model
+    import kenlm
+    # install kenlm from https://github.com/kpu/kenlm
+
+    if lm_model is None:
+        lm_model = kenlm.Model(args.lm_path)
+        
     beams, attention_weights = generate_sentence_beam(sentence)
+    candidates = []
     for beam in beams:
         predicted_sentence = tokenizer_ro.decode([i for i in beam.ids 
                                                     if i < tokenizer_ro.vocab_size])  
-        tf.compat.v1.logging.info('predicted: {} prob: {}'.format(predicted_sentence, beam.log_prob))
+        lm_prob = lm_model.score(predicted_sentence, bos=True, eos=True)
+
+        if args.normalize:
+            cand_prob = beam.log_prob + args.weight_lm * lm_prob * (1.0/beam.length)
+        else:
+            cand_prob = beam.log_prob + args.weight_lm * lm_prob
+        print('predicted: {}\n beam prob: {} lm prob: {} reranking prob: {}'.format(
+                predicted_sentence, beam.log_prob, lm_prob, cand_prob))
+
     return predicted_sentence
 
 def init_beam(vocab_size, end_token_id, beam_width=1):
+    
+    length_penalty = 0.9 if args.normalize else 0.0
     config = beam_search.BeamSearchConfig(
         beam_width=beam_width,
         vocab_size=vocab_size,
         eos_token=end_token_id,
-        length_penalty_weight=0.0,
+        length_penalty_weight=length_penalty,
         choose_successors_fn=beam_search.choose_top_k)
 
     beam_state = beam_search.BeamSearchState(
@@ -188,16 +209,13 @@ def generate_sentence_beam(inp_sentence: str):
             tf.compat.v1.logging.error('no checkpoints for transformers, aborting')
             return None
 
+    start_token, end_token = [tokenizer_ro.vocab_size], [tokenizer_ro.vocab_size + 1]
     if args.bert:
-        start_token, end_token = ['[CLS]'], ['[SEP]']
-        inp_sentence = tokenizer_bert.convert_tokens_to_ids(start_token +
-             tokenizer_bert.tokenize(inp_sentence) + end_token)
-        start_token_id = tokenizer_bert.convert_tokens_to_ids(start_token)[0]
-        end_token_id = tokenizer_bert.convert_tokens_to_ids(end_token)[0]
+        inp_sentence = tokenizer_bert.convert_tokens_to_ids(['[CLS]'] +
+             tokenizer_bert.tokenize(inp_sentence) + ['[SEP]'])
     else:
-        start_token, end_token = [tokenizer_ro.vocab_size], [tokenizer_ro.vocab_size + 1]
         inp_sentence = start_token + tokenizer_ro.encode(inp_sentence) + end_token
-        start_token_id, end_token_id = tokenizer_ro.vocab_size, tokenizer_ro.vocab_size + 1
+    start_token_id, end_token_id = tokenizer_ro.vocab_size, tokenizer_ro.vocab_size + 1
 
     # duplicate x beam_width == batch size
     encoder_input = tf.expand_dims(inp_sentence, 0)
@@ -383,6 +401,7 @@ def train_gec():
         
         for sents, seg in train_dataset.take(1):
             tf.compat.v1.logging.info('input shapes: {} {}'.format(sents.shape, seg.shape))
+            tf.compat.v1.logging.info('source: {} \n target: {} \n seg: {}\n'.format(sents[0][0], sents[0][1], seg[0]))
 
         if args.use_tpu:
            train_dataset = strategy.experimental_distribute_dataset(train_dataset)
@@ -452,35 +471,6 @@ def train_gec():
             print_stats(args, epoch=epoch, stage='dev', batch_idx=None, 
                             loss=eval_loss.result(), acc=eval_accuracy.result(), log=log)
 
-def test_bert_trans():
-    if args.bert is True:
-        sample_transformer = TransformerBert(num_layers=2, d_model=512, num_heads=8, dff=2048, 
-            input_vocab_size=8500, target_vocab_size=8000, 
-            model_dir=args.bert_model_dir, pe_input=10000, pe_target=6000)
-    else:
-        sample_transformer = Transformer(
-            num_layers=2, d_model=512, num_heads=8, dff=2048, 
-            input_vocab_size=8500, target_vocab_size=8000, 
-            pe_input=10000, pe_target=6000)
-
-    temp_input = tf.random.uniform((64, 38), dtype=tf.int64, minval=0, maxval=200)
-    temp_seg = tf.ones((64, 38), dtype=tf.int64)
-    temp_target = tf.random.uniform((64, 36), dtype=tf.int64, minval=0, maxval=200)
-    enc_padding_mask, combined_mask, dec_padding_mask = create_masks(temp_input, temp_target)
-
-    if args.bert is True:
-        fn_out, _ = sample_transformer(temp_input, temp_seg, temp_target, training=True, 
-                                    enc_padding_mask=enc_padding_mask, 
-                                    look_ahead_mask=combined_mask,
-                                    dec_padding_mask=dec_padding_mask)
-    else:
-        fn_out, _ = sample_transformer(temp_input, temp_target, training=False, 
-                                    enc_padding_mask=None, 
-                                    look_ahead_mask=None,
-                                    dec_padding_mask=None)
-
-    tf.compat.v1.logging.info(fn_out.shape)  # (batch_size, tar_seq_len, target_vocab_size)
-
 def run_main():
     if args.records:
         construct_tf_records(args, args.subwords_path)
@@ -499,7 +489,6 @@ def run_main():
             upload_blob(args.bucket, tokenizer_bert_tf_records, tokenizer_bert_tf_records)
 
     if args.train_mode:
-        # test_bert_trans()
         train_gec()
     if args.decode_mode:
         correct_from_file(in_file=args.in_file_decode, out_file=args.out_file_decode)
@@ -518,10 +507,7 @@ def main(argv):
         tf.compat.v1.logging.info('Running on TPU {}'.format(tpu_cluster_resolver.cluster_spec().as_dict()['worker']))
         tf.compat.v1.logging.info("Tpu replicas in sync: {}".format(strategy.num_replicas_in_sync))
         with strategy.scope():
-            if args.test_model:
-                test_bert_trans()
-            else:
-                run_main()
+            run_main()
     else:
         if args.test_model:
             test_bert_trans()
