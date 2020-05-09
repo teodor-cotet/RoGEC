@@ -43,7 +43,6 @@ tf.compat.v1.flags.DEFINE_string(
     "specified, we will attempt to automatically detect the GCE project from "
     "metadata.")
 tf.compat.v1.flags.DEFINE_bool("use_tpu", False, "Use TPUs rather than plain CPUs")
-tf.compat.v1.flags.DEFINE_bool("test_model", False, "Rone one pass through the model")
 tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from where to load bert')
 
 
@@ -88,8 +87,8 @@ tf.compat.v1.flags.DEFINE_bool('normalize', default=False, help='normalize reran
 tf.compat.v1.flags.DEFINE_float('weight_lm', default=1., help='weight of the LM in decoding (should be in [0, 2])')
 
 # for prediction purposes only
-tf.compat.v1.flags.DEFINE_string('in_file_decode', default='corpora/cna/dev_old/small_decode_test.txt', help='')
-tf.compat.v1.flags.DEFINE_string('out_file_decode', default='corpora/cna/dev_old/small_decode_test_predicted.txt', help='')
+tf.compat.v1.flags.DEFINE_string('in_file_decode', default='corpora/synthetic_wiki/50_wiki_dirty.txt', help='')
+tf.compat.v1.flags.DEFINE_string('out_file_decode', default='corpora/synthetic_wiki/50_wiki_predicted.txt', help='')
 
 # dummy values
 tf.compat.v1.flags.DEFINE_string('subwords_path', default='', help='path to subwords path')
@@ -156,6 +155,14 @@ def correct_gec(sentence: str, plot=''):
     beams, attention_weights = generate_sentence_beam(sentence)
     candidates = []
     for beam in beams:
+        print('predicted len {}'.format(len(beam.ids) - 2))
+        decoded_list = []
+        for i in beam.ids:
+            if i < tokenizer_ro.vocab_size:
+                el = tokenizer_ro.decode([i])
+                decoded_list.append(el)
+        #print(decoded_list)
+
         predicted_sentence = tokenizer_ro.decode([i for i in beam.ids 
                                                     if i < tokenizer_ro.vocab_size])  
         lm_prob = lm_model.score(predicted_sentence, bos=True, eos=True)
@@ -164,14 +171,13 @@ def correct_gec(sentence: str, plot=''):
             cand_prob = beam.log_prob + args.weight_lm * lm_prob * (1.0/beam.length)
         else:
             cand_prob = beam.log_prob + args.weight_lm * lm_prob
-        print('predicted: {}\n beam prob: {} lm prob: {} reranking prob: {}'.format(
-                predicted_sentence, beam.log_prob, lm_prob, cand_prob))
+        print('predict: {}\n'.format(predicted_sentence))
 
     return predicted_sentence
 
 def init_beam(vocab_size, end_token_id, beam_width=1):
     
-    length_penalty = 0.9 if args.normalize else 0.0
+    length_penalty = 0.6 if args.normalize else 0.0
     config = beam_search.BeamSearchConfig(
         beam_width=beam_width,
         vocab_size=vocab_size,
@@ -214,7 +220,10 @@ def generate_sentence_beam(inp_sentence: str):
         inp_sentence = tokenizer_bert.convert_tokens_to_ids(['[CLS]'] +
              tokenizer_bert.tokenize(inp_sentence) + ['[SEP]'])
     else:
+        in_sentence = inp_sentence
         inp_sentence = start_token + tokenizer_ro.encode(inp_sentence) + end_token
+        # print(tokenizer_ro.encode(in_sentence))
+        print('original len: {}'.format(len(tokenizer_ro.encode(in_sentence))))
     start_token_id, end_token_id = tokenizer_ro.vocab_size, tokenizer_ro.vocab_size + 1
 
     # duplicate x beam_width == batch size
@@ -305,12 +314,18 @@ def loss_function(real, pred):
 
     mask = tf.cast(mask, dtype=loss_.dtype)
     loss_ *= mask
-    
-    return tf.nn.compute_average_loss(loss_, global_batch_size=args.batch_size)
+    loss_reduced = tf.reduce_sum(loss_)/tf.reduce_sum(mask)
+
+    if args.use_tpu:
+        return tf.nn.compute_average_loss(loss_reduced, global_batch_size=args.batch_size)
+    else:
+        return loss_reduced
+
 
 @tf.function(input_signature=train_step_signature)
 def train_step(data, inp_segs):
     global transformer, optimizer, train_loss, train_accuracy, strategy
+    # batch, seq_length
     inp, tar = data[:, 0], data[:, 1]
     tar_inp = tar[:, :-1]
     tar_real = tar[:, 1:]
@@ -509,10 +524,7 @@ def main(argv):
         with strategy.scope():
             run_main()
     else:
-        if args.test_model:
-            test_bert_trans()
-        else:
-            run_main()
+       run_main()
 
 if __name__ == "__main__":
     # tf.disable_v2_behavior()
