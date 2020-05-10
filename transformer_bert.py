@@ -329,10 +329,10 @@ def acc_function(real, pred):
     mask = tf.math.logical_not(tf.math.equal(real, 0))
     mask = tf.cast(mask, tf.int64)
 
-    sum_mask = tf.cast(tf.reduce_sum(mask), tf.int64)
-    sum_masked_eq = tf.cast(tf.reduce_sum(eq * mask), tf.int64)
-    accuracy = sum_masked_eq
-    # accuracy = tf.divide(sum_masked_eq, sum_mask)
+    sum_mask = tf.cast(tf.reduce_sum(mask), tf.float32)
+    sum_masked_eq = tf.cast(tf.reduce_sum(eq * mask), tf.float32)
+    # accuracy = sum_masked_eq
+    accuracy = tf.divide(sum_masked_eq, sum_mask)
     return accuracy
 
 @tf.function(input_signature=train_step_signature, experimental_compile=False)
@@ -358,11 +358,13 @@ def train_step(data, inp_segs):
                                     combined_mask, 
                                     dec_padding_mask)
         loss = loss_function(tar_real, predictions)
+    
     gradients = tape.gradient(loss, transformer.trainable_variables)
     optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
 
-    tf.compat.v1.logging.info('transformer summary: {}'.format(transformer.summary()))
     acc = acc_function(tar_real, predictions)
+
+    tf.compat.v1.logging.info('transformer summary: {}'.format(transformer.summary()))
     if args.use_tpu == False:
         train_loss.update_state(loss)
         train_accuracy.update_state(acc)
