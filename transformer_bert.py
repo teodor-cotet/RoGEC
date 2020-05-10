@@ -398,15 +398,15 @@ def distributed_train_step(dataset_inputs):
     # per_example_accs = per_example_accs.values
     # per_example_losses = per_example_losses.values
 
-    # per_example_losses = tf.stack(per_example_losses, axis=0)
-    # per_example_accs = tf.stack(per_example_accs, axis=0)
+    per_example_losses = tf.stack(per_example_losses.values, axis=0)
+    per_example_accs = tf.stack(per_example_accs.values, axis=0)
     # print('per_example_losses', per_example_losses)
 
     # mean_loss = tf.math.reduce_sum(per_example_losses) #  strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
     # mean_acc = tf.math.reduce_sum(per_example_accs) # strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
     # print('mean loss', mean_loss)
-    mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses.values, axis=0)
-    mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs.values, axis=0)
+    mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
+    mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
     return mean_loss, mean_acc
 
 @tf.function
@@ -419,13 +419,13 @@ def distributed_eval_step(dataset_inputs):
     # per_example_accs = per_example_accs.values
     # per_example_losses = per_example_losses.values
 
-    # per_example_losses = tf.stack(per_example_losses, axis=0)
-    # per_example_accs = tf.stack(per_example_accs, axis=0)
+    per_example_losses = tf.stack(per_example_losses.values, axis=0)
+    per_example_accs = tf.stack(per_example_accs.values, axis=0)
     
     # mean_loss = tf.math.reduce_sum(per_example_losses) #  strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
     # mean_acc = tf.math.reduce_sum(per_example_accs) # strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0
-    mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses.values, axis=0)
-    mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs.values, axis=0)
+    mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
+    mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
     return mean_loss, mean_acc
 
 def print_stats(args, epoch, stage, batch_idx, loss, acc, log):
