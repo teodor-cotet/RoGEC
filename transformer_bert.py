@@ -488,8 +488,8 @@ def train_gec():
                 
                 if args.use_tpu:
                     mean_loss, mean_acc = distributed_train_step(data)
-                    train_loss.update_state(mean_loss)
-                    train_accuracy.update_state(mean_acc)
+                    train_loss(mean_loss)
+                    train_accuracy(mean_acc)
                 else:
                     data, inp_seg = data
                     train_step(data, inp_seg)
@@ -511,8 +511,8 @@ def train_gec():
                 
                 if args.use_tpu:
                     mean_loss, mean_acc = distributed_eval_step(data)
-                    eval_loss.update_state(mean_loss)
-                    eval_accuracy.update_state(mean_acc)
+                    eval_loss(mean_loss)
+                    eval_accuracy(mean_acc)
                 else:
                     data, inp_seg = data
                     eval_step(data, inp_seg)
