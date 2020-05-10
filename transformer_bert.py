@@ -312,8 +312,10 @@ def loss_function(real, pred):
     mask = tf.cast(mask, dtype=tf.float32)
     loss_ *= mask
     loss_ = tf.cast(loss_, dtype=tf.float32)
-    
-    loss_reduced = tf.divide(tf.reduce_sum(loss_), tf.reduce_sum(mask))
+    loss_sum = tf.cast(tf.reduce_sum(loss_), tf.float32)
+    mask_sum = tf.cast(tf.reduce_sum(mask), tf.float32)
+
+    loss_reduced = tf.divide(loss_sum, mask_sum)
     # loss_reduced = tf.reduce_sum(loss_)
     return loss_reduced
 
@@ -326,8 +328,11 @@ def acc_function(real, pred):
 
     mask = tf.math.logical_not(tf.math.equal(real, 0))
     mask = tf.cast(mask, tf.int64)
-    accuracy = tf.divide(tf.reduce_sum(eq * mask), tf.reduce_sum(mask))
-    # accuracy = tf.reduce_sum(eq * mask)
+
+    sum_mask = tf.cast(tf.reduce_sum(mask), tf.int64)
+    sum_masked_eq = tf.cast(tf.reduce_sum(eq * mask), tf.int64)
+    
+    accuracy = tf.divide(sum_masked_eq, sum_mask)
     return accuracy
 
 @tf.function(input_signature=train_step_signature)
