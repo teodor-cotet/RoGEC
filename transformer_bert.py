@@ -393,7 +393,7 @@ def distributed_train_step(dataset_inputs):
     global train_loss, train_accuracy
 
     data, segs = dataset_inputs
-    per_example_losses, per_example_accs = strategy.experimental_run_v2(train_step, args=(data, segs))
+    per_example_losses, per_example_accs = strategy.run(train_step, args=(data, segs))
 
     mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
     mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
@@ -407,7 +407,7 @@ def distributed_eval_step(dataset_inputs):
     global eval_loss, eval_accuracy
 
     data, segs = dataset_inputs
-    per_example_losses, per_example_accs = strategy.experimental_run_v2(eval_step, args=(data, segs))
+    per_example_losses, per_example_accs = strategy.run(eval_step, args=(data, segs))
     mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
     mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
 
