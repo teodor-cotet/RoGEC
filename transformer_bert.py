@@ -155,23 +155,21 @@ def correct_gec(sentence: str, plot=''):
     beams, attention_weights = generate_sentence_beam(sentence)
     candidates = []
     for beam in beams:
-        print('predicted len {}'.format(len(beam.ids) - 2))
-        decoded_list = []
+        sentence_ids = []
+        print(beam.ids)
         for i in beam.ids:
             if i < tokenizer_ro.vocab_size:
-                el = tokenizer_ro.decode([i])
-                decoded_list.append(el)
-        #print(decoded_list)
-
-        predicted_sentence = tokenizer_ro.decode([i for i in beam.ids 
-                                                    if i < tokenizer_ro.vocab_size])  
+                sentence_ids.append(i)
+            if i == tokenizer_ro.vocab_size + 1:
+                break
+        predicted_sentence = tokenizer_ro.decode(sentence_ids)
+        print('pred: {}'.format(predicted_sentence))
         lm_prob = lm_model.score(predicted_sentence, bos=True, eos=True)
 
         if args.normalize:
             cand_prob = beam.log_prob + args.weight_lm * lm_prob * (1.0/beam.length)
         else:
             cand_prob = beam.log_prob + args.weight_lm * lm_prob
-        print('predict: {}\n'.format(predicted_sentence))
 
     return predicted_sentence
 
@@ -223,7 +221,6 @@ def generate_sentence_beam(inp_sentence: str):
         in_sentence = inp_sentence
         inp_sentence = start_token + tokenizer_ro.encode(inp_sentence) + end_token
         # print(tokenizer_ro.encode(in_sentence))
-        print('original len: {}'.format(len(tokenizer_ro.encode(in_sentence))))
     start_token_id, end_token_id = tokenizer_ro.vocab_size, tokenizer_ro.vocab_size + 1
 
     # duplicate x beam_width == batch size
@@ -315,16 +312,23 @@ def loss_function(real, pred):
     mask = tf.cast(mask, dtype=loss_.dtype)
     loss_ *= mask
     loss_reduced = tf.reduce_sum(loss_)/tf.reduce_sum(mask)
+    return loss_reduced
 
-    if args.use_tpu:
-        return tf.nn.compute_average_loss(loss_reduced, global_batch_size=args.batch_size)
-    else:
-        return loss_reduced
+def acc_function(real, pred):
+    pred_targets = tf.math.argmax(pred, axis=-1)
+    pred_targets = tf.cast(pred_targets, tf.int64)
+    
+    eq = tf.equal(pred_targets, real)
+    eq = tf.cast(eq, tf.int64)
 
+    mask = tf.math.logical_not(tf.math.equal(real, 0))
+    mask = tf.cast(mask, tf.int64)
+    accuracy = tf.reduce_sum(eq * mask) / tf.reduce_sum(mask)
+    return accuracy
 
 @tf.function(input_signature=train_step_signature)
 def train_step(data, inp_segs):
-    global transformer, optimizer, train_loss, train_accuracy, strategy
+    global transformer, optimizer, train_accuracy, strategy, train_loss
     # batch, seq_length
     inp, tar = data[:, 0], data[:, 1]
     tar_inp = tar[:, :-1]
@@ -349,13 +353,15 @@ def train_step(data, inp_segs):
     optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
 
     tf.compat.v1.logging.info('transformer summary: {}'.format(transformer.summary()))
-
-    train_loss.update_state(loss)
-    train_accuracy.update_state(tar_real, predictions)
+    acc = acc_function(tar_real, predictions)
+    if args.use_tpu == False:
+        train_loss.update_state(loss)
+        train_accuracy.update_state(acc)
+    return loss, acc
 
 @tf.function(input_signature=eval_step_signature)
 def eval_step(data, inp_segs):
-    global transformer, optimizer, eval_loss, eval_accuracy
+    global transformer, optimizer, eval_accuracy, eval_loss
     inp, tar = data[:, 0], data[:, 1]
     tar_inp = tar[:, :-1]
     tar_real = tar[:, 1:]
@@ -375,18 +381,39 @@ def eval_step(data, inp_segs):
                                     combined_mask, 
                                     dec_padding_mask)
         loss = loss_function(tar_real, predictions)
-    eval_loss.update_state(loss)
-    eval_accuracy.update_state(tar_real, predictions)
+    
+    acc = acc_function(tar_real, predictions)
+    if args.use_tpu == False:
+        eval_loss.update_state(loss)
+        eval_accuracy.update_state(acc)
+    return loss, acc 
 
 @tf.function
 def distributed_train_step(dataset_inputs):
+    global train_loss, train_accuracy
+
     data, segs = dataset_inputs
-    return strategy.experimental_run_v2(train_step, args=(data, segs))
+    per_example_losses, per_example_accs = strategy.experimental_run_v2(train_step, args=(data, segs))
+
+    mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
+    mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
+    
+    train_loss.update_state(mean_loss)
+    train_accuracy.update_state(mean_acc)
+    return mean_loss, mean_acc
 
 @tf.function
 def distributed_eval_step(dataset_inputs):
+    global eval_loss, eval_accuracy
+
     data, segs = dataset_inputs
-    return strategy.experimental_run_v2(eval_step, args=(data, segs))
+    per_example_losses, per_example_accs = strategy.experimental_run_v2(eval_step, args=(data, segs))
+    mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
+    mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
+
+    eval_loss.update_state(mean_loss)
+    eval_accuracy.update_state(mean_acc)
+    return mean_loss, mean_acc
 
 def print_stats(args, epoch, stage, batch_idx, loss, acc, log):
     if batch_idx is not None:
@@ -423,9 +450,9 @@ def train_gec():
            dev_dataset = strategy.experimental_distribute_dataset(dev_dataset)
 
         train_loss = tf.keras.metrics.Mean(name='train_loss')
-        train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
+        train_accuracy = tf.keras.metrics.Mean(name='train_accuracy')
         eval_loss = tf.keras.metrics.Mean(name='eval_loss')
-        eval_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='eval_accuracy')
+        eval_accuracy = tf.keras.metrics.Mean(name='eval_accuracy')
 
         transformer, optimizer = get_model_gec()
       
