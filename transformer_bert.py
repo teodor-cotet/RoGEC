@@ -524,8 +524,8 @@ def train_gec():
 
                 # print_stats(args, epoch=epoch, stage='dev', batch_idx=batch_idx, 
                 #            loss=eval_loss.result(), acc=eval_accuracy.result(), log=log)
-            print('train losses', tf.reduce_mean(train_losses).numpy()[0])
-            print('eval losses', tf.reduce_mean(eval_losses).numpy()[0])
+            print('train losses', tf.reduce_mean(train_losses).numpy())
+            print('eval losses', tf.reduce_mean(eval_losses).numpy())
 
             # print_stats(args, epoch=epoch, stage='dev', batch_idx=None, 
             #                 loss=eval_loss.result(), acc=eval_accuracy.result(), log=log)
