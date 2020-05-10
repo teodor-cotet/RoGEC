@@ -552,6 +552,11 @@ def run_main():
 def main(argv):
     del argv
     global args, strategy
+    tf.compat.v1.logging.info('Devices: {}'.format(tf.config.list_physical_devices('CPU')))
+    for dev in tf.config.list_physical_devices('CPU'):
+        if dev.name.find('XLA') >= 0:
+            continue 
+        tf.config.set_visible_devices(dev, 'CPU')
 
     if args.use_tpu == True:
         tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(args.tpu,
