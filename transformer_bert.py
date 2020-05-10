@@ -331,8 +331,8 @@ def acc_function(real, pred):
 
     sum_mask = tf.cast(tf.reduce_sum(mask), tf.int64)
     sum_masked_eq = tf.cast(tf.reduce_sum(eq * mask), tf.int64)
-    
-    accuracy = tf.divide(sum_masked_eq, sum_mask)
+    accuracy = sum_masked_eq
+    # accuracy = tf.divide(sum_masked_eq, sum_mask)
     return accuracy
 
 @tf.function(input_signature=train_step_signature, experimental_compile=False)
