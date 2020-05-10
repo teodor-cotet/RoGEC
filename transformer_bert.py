@@ -301,6 +301,7 @@ def get_model_gec():
     
     return transformer, optimizer
 
+@tf.function(experimental_compile=False)
 def loss_function(real, pred):
     loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
         from_logits=True, reduction=tf.keras.losses.Reduction.NONE)
@@ -318,7 +319,7 @@ def loss_function(real, pred):
     loss_reduced = tf.divide(loss_sum, mask_sum)
     # loss_reduced = tf.reduce_sum(loss_)
     return loss_reduced
-
+@tf.function(experimental_compile=False)
 def acc_function(real, pred):
     pred_targets = tf.math.argmax(pred, axis=-1)
     pred_targets = tf.cast(pred_targets, tf.int64)
