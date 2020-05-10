@@ -481,6 +481,7 @@ def train_gec():
             tf.compat.v1.logging.info('latest checkpoint restored {}'.format(args.checkpoint_path))
 
         tf.compat.v1.logging.info('starting training...')
+        eval_losses, train_losses, eval_accs, train_accs = [], [], [], []
         for epoch in range(args.epochs):
             train_loss.reset_states()
             train_accuracy.reset_states()
@@ -492,19 +493,17 @@ def train_gec():
                 
                 if args.use_tpu:
                     mean_loss, mean_acc = distributed_train_step(data)
-                    print('mean loss: ', mean_loss)
-                    train_loss.update_state(mean_loss)
-                    train_accuracy.update_state(mean_acc)
-
+                    train_losses.append(mean_loss)
+                    train_accs.append(mean_acc)
                 else:
                     data, inp_seg = data
                     train_step(data, inp_seg)
 
-                print_stats(args, epoch=epoch, stage='train', batch_idx=batch_idx,
-                             loss=train_loss.result(), acc=train_accuracy.result(), log=log)
+                # print_stats(args, epoch=epoch, stage='train', batch_idx=batch_idx,
+                #              loss=train_loss.result(), acc=train_accuracy.result(), log=log)
 
-            print_stats(args, epoch=epoch, stage='train', batch_idx=None, 
-                            loss=train_loss.result(), acc=train_accuracy.result(), log=log)
+            # print_stats(args, epoch=epoch, stage='train', batch_idx=None, 
+            #                 loss=train_loss.result(), acc=train_accuracy.result(), log=log)
 
             if (epoch + 1) % 2 == 0:
                 ckpt_save_path = ckpt_manager.save()
@@ -517,17 +516,19 @@ def train_gec():
                 
                 if args.use_tpu:
                     mean_loss, mean_acc = distributed_eval_step(data)
-                    eval_loss.update_state(mean_loss)
-                    eval_accuracy.update_state(mean_acc)
+                    eval_losses.append(mean_loss)
+                    eval_accs.append(mean_acc)
                 else:
                     data, inp_seg = data
                     eval_step(data, inp_seg)
 
-                print_stats(args, epoch=epoch, stage='dev', batch_idx=batch_idx, 
-                            loss=eval_loss.result(), acc=eval_accuracy.result(), log=log)
-            
-            print_stats(args, epoch=epoch, stage='dev', batch_idx=None, 
-                            loss=eval_loss.result(), acc=eval_accuracy.result(), log=log)
+                # print_stats(args, epoch=epoch, stage='dev', batch_idx=batch_idx, 
+                #            loss=eval_loss.result(), acc=eval_accuracy.result(), log=log)
+            print('train losses', tf.reduce_mean(train_losses))
+            print('eval losses', tf.reduce_mean(eval_losses))
+
+            # print_stats(args, epoch=epoch, stage='dev', batch_idx=None, 
+            #                 loss=eval_loss.result(), acc=eval_accuracy.result(), log=log)
 
 def run_main():
     if args.records:
