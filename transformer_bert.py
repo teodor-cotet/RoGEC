@@ -397,8 +397,8 @@ def distributed_train_step(dataset_inputs):
     per_example_accs = strategy.experimental_local_results(per_example_accs)
     per_example_losses = strategy.experimental_local_results(per_example_losses)
 
-    per_example_losses = tf.cast(list(per_example_losses), tf.float32)
-    per_example_accs = tf.cast(list(per_example_accs), tf.float32)
+    per_example_losses = tf.cast(list(per_example_losses), tf.float64)
+    per_example_accs = tf.cast(list(per_example_accs), tf.float64)
     
     mean_loss = tf.reduce_mean(per_example_losses) #  strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
     mean_acc = tf.reduce_mean(per_example_accs) # strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
@@ -414,8 +414,8 @@ def distributed_eval_step(dataset_inputs):
     per_example_accs = strategy.experimental_local_results(per_example_accs)
     per_example_losses = strategy.experimental_local_results(per_example_losses)
 
-    per_example_losses = tf.cast(list(per_example_losses), tf.float32)
-    per_example_accs = tf.cast(list(per_example_accs), tf.float32)
+    per_example_losses = tf.cast(list(per_example_losses), tf.float64)
+    per_example_accs = tf.cast(list(per_example_accs), tf.float64)
     
     mean_loss = tf.reduce_mean(per_example_losses) #  strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
     mean_acc = tf.reduce_mean(per_example_accs) # strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
