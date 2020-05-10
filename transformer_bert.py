@@ -397,14 +397,9 @@ def distributed_train_step(dataset_inputs):
     data, segs = dataset_inputs
     per_example_losses, per_example_accs = strategy.experimental_run_v2(train_step, args=(data, segs))
 
-    # per_example_accs = per_example_accs.values
-    # per_example_losses = per_example_losses.values
-
     per_example_losses = tf.stack(per_example_losses.values, axis=0)
     per_example_accs = tf.stack(per_example_accs.values, axis=0)
-    print('per_example_losses', per_example_losses)
 
-    # print('per_example_losses', per_example_losses)
     mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
     mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
     return mean_loss, mean_acc
@@ -416,12 +411,9 @@ def distributed_eval_step(dataset_inputs):
     data, segs = dataset_inputs
     per_example_losses, per_example_accs = strategy.experimental_run_v2(eval_step, args=(data, segs))
 
-    # per_example_accs = per_example_accs.values
-    # per_example_losses = per_example_losses.values
-
     per_example_losses = tf.stack(per_example_losses.values, axis=0)
     per_example_accs = tf.stack(per_example_accs.values, axis=0)
-    print('per_example_losses', per_example_losses)
+
     mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
     mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
     return mean_loss, mean_acc
@@ -482,12 +474,8 @@ def train_gec():
 
         tf.compat.v1.logging.info('starting training...')
         eval_losses, train_losses, eval_accs, train_accs = [], [], [], []
-        for epoch in range(args.epochs):
-            train_loss.reset_states()
-            train_accuracy.reset_states()
-            eval_loss.reset_states()
-            eval_accuracy.reset_states()
 
+        for epoch in range(args.epochs):
             # train 
             for batch_idx, data in enumerate(train_dataset):
                 
@@ -501,9 +489,11 @@ def train_gec():
 
                 # print_stats(args, epoch=epoch, stage='train', batch_idx=batch_idx,
                 #              loss=train_loss.result(), acc=train_accuracy.result(), log=log)
+            train_loss = tf.reduce_mean(train_losses).numpy()
+            train_accuracy = tf.reduce_mean(train_accs).numpy()
 
-            # print_stats(args, epoch=epoch, stage='train', batch_idx=None, 
-            #                 loss=train_loss.result(), acc=train_accuracy.result(), log=log)
+            print_stats(args, epoch=epoch, stage='train', batch_idx=None, 
+                             loss=train_loss, acc=train_accuracy, log=log)
 
             if (epoch + 1) % 2 == 0:
                 ckpt_save_path = ckpt_manager.save()
@@ -524,11 +514,11 @@ def train_gec():
 
                 # print_stats(args, epoch=epoch, stage='dev', batch_idx=batch_idx, 
                 #            loss=eval_loss.result(), acc=eval_accuracy.result(), log=log)
-            print('train losses', tf.reduce_mean(train_losses).numpy())
-            print('eval losses', tf.reduce_mean(eval_losses).numpy())
+            eval_loss = tf.reduce_mean(eval_losses).numpy()
+            eval_accuracy = tf.reduce_mean(eval_accs).numpy()
 
-            # print_stats(args, epoch=epoch, stage='dev', batch_idx=None, 
-            #                 loss=eval_loss.result(), acc=eval_accuracy.result(), log=log)
+            print_stats(args, epoch=epoch, stage='dev', batch_idx=None, 
+                             loss=eval_loss, acc=eval_accuracy, log=log)
 
 def run_main():
     if args.records:
