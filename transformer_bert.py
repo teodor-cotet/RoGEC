@@ -395,11 +395,11 @@ def distributed_train_step(dataset_inputs):
     data, segs = dataset_inputs
     per_example_losses, per_example_accs = strategy.experimental_run_v2(train_step, args=(data, segs))
 
-    per_example_accs = strategy.experimental_local_results(per_example_accs)
-    per_example_losses = strategy.experimental_local_results(per_example_losses)
+    per_example_accs = per_example_accs.values
+    per_example_losses = per_example_losses.values
 
-    per_example_losses = tf.stack(per_example_losses)
-    per_example_accs = tf.stack(per_example_accs)
+    per_example_losses = tf.stack(per_example_losses, axis=0)
+    per_example_accs = tf.stack(per_example_accs, axis=0)
     
     mean_loss = tf.reduce_mean(per_example_losses) #  strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
     mean_acc = tf.reduce_mean(per_example_accs) # strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
@@ -412,11 +412,11 @@ def distributed_eval_step(dataset_inputs):
     data, segs = dataset_inputs
     per_example_losses, per_example_accs = strategy.experimental_run_v2(eval_step, args=(data, segs))
 
-    per_example_accs = strategy.experimental_local_results(per_example_accs)
-    per_example_losses = strategy.experimental_local_results(per_example_losses)
+    per_example_accs = per_example_accs.values
+    per_example_losses = per_example_losses.values
 
-    per_example_losses = tf.stack(per_example_losses)
-    per_example_accs = tf.stack(per_example_accs)
+    per_example_losses = tf.stack(per_example_losses, axis=0)
+    per_example_accs = tf.stack(per_example_accs, axis=0)
     
     mean_loss = tf.reduce_mean(per_example_losses) #  strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
     mean_acc = tf.reduce_mean(per_example_accs) # strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
