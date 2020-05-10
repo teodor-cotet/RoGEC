@@ -311,7 +311,7 @@ def loss_function(real, pred):
 
     mask = tf.cast(mask, dtype=tf.float32)
     loss_ *= mask
-    loss_reduced = tf.reduce_sum(loss_) # /tf.reduce_sum(mask)
+    loss_reduced = tf.math.divide(tf.reduce_sum(loss_), tf.reduce_sum(mask))
     return loss_reduced
 
 def acc_function(real, pred):
@@ -323,7 +323,7 @@ def acc_function(real, pred):
 
     mask = tf.math.logical_not(tf.math.equal(real, 0))
     mask = tf.cast(mask, tf.int64)
-    accuracy = tf.reduce_sum(eq * mask) # / tf.reduce_sum(mask)
+    accuracy = tf.math.divide(tf.reduce_sum(eq * mask), tf.reduce_sum(mask))
     return accuracy
 
 @tf.function(input_signature=train_step_signature)
@@ -390,7 +390,7 @@ def eval_step(data, inp_segs):
 
 @tf.function
 def distributed_train_step(dataset_inputs):
-    global train_loss, train_accuracy, strategy
+    global train_loss, train_accuracy
 
     data, segs = dataset_inputs
     per_example_losses, per_example_accs = strategy.experimental_run_v2(train_step, args=(data, segs))
@@ -404,16 +404,20 @@ def distributed_train_step(dataset_inputs):
 
     # print('per_example_losses', per_example_losses)
 
-    # mean_loss = tf.math.reduce_sum(per_example_losses) #  strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
-    # mean_acc = tf.math.reduce_sum(per_example_accs) # strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
+    mean_loss = tf.math.reduce_mean(per_example_losses) #  strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
+    mean_acc = tf.math.reduce_mean(per_example_accs) # strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
     # print('mean loss', mean_loss)
-    mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
-    mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
+    # mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
+    # mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
+
+    train_loss.update_state(mean_loss)
+    train_accuracy.update_state(mean_acc)
+
     return mean_loss, mean_acc
 
 @tf.function
 def distributed_eval_step(dataset_inputs):
-    global eval_loss, eval_accuracy, strategy
+    global eval_loss, eval_accuracy
 
     data, segs = dataset_inputs
     per_example_losses, per_example_accs = strategy.experimental_run_v2(eval_step, args=(data, segs))
@@ -424,10 +428,14 @@ def distributed_eval_step(dataset_inputs):
     per_example_losses = tf.stack(per_example_losses.values, axis=0)
     per_example_accs = tf.stack(per_example_accs.values, axis=0)
     print('per_example_losses', per_example_losses)
-    # mean_loss = tf.math.reduce_sum(per_example_losses) #  strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
-    # mean_acc = tf.math.reduce_sum(per_example_accs) # strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0
-    mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
-    mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
+    mean_loss = tf.math.reduce_mean(per_example_losses) #  strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
+    mean_acc = tf.math.reduce_mean(per_example_accs) # strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0
+    # mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
+    # mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
+    
+    eval_loss.update_state(mean_loss)
+    eval_accuracy.update_state(mean_acc)
+
     return mean_loss, mean_acc
 
 def print_stats(args, epoch, stage, batch_idx, loss, acc, log):
@@ -497,8 +505,7 @@ def train_gec():
                 if args.use_tpu:
                     mean_loss, mean_acc = distributed_train_step(data)
                     print('mean loss: ', mean_loss)
-                    train_loss(mean_loss)
-                    train_accuracy(mean_acc)
+                    
                 else:
                     data, inp_seg = data
                     train_step(data, inp_seg)
