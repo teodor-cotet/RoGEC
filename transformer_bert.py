@@ -409,10 +409,6 @@ def distributed_train_step(dataset_inputs):
     # print('mean loss', mean_loss)
     # mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
     # mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
-
-    train_loss.update_state(mean_loss)
-    train_accuracy.update_state(mean_acc)
-
     return mean_loss, mean_acc
 
 @tf.function
@@ -432,10 +428,6 @@ def distributed_eval_step(dataset_inputs):
     mean_acc = tf.math.reduce_mean(per_example_accs) # strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0
     # mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
     # mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
-    
-    eval_loss.update_state(mean_loss)
-    eval_accuracy.update_state(mean_acc)
-
     return mean_loss, mean_acc
 
 def print_stats(args, epoch, stage, batch_idx, loss, acc, log):
@@ -505,7 +497,9 @@ def train_gec():
                 if args.use_tpu:
                     mean_loss, mean_acc = distributed_train_step(data)
                     print('mean loss: ', mean_loss)
-                    
+                    train_loss.update_state(mean_loss)
+                    train_accuracy.update_state(mean_acc)
+
                 else:
                     data, inp_seg = data
                     train_step(data, inp_seg)
@@ -527,8 +521,8 @@ def train_gec():
                 
                 if args.use_tpu:
                     mean_loss, mean_acc = distributed_eval_step(data)
-                    eval_loss(mean_loss)
-                    eval_accuracy(mean_acc)
+                    eval_loss.update_state(mean_loss)
+                    eval_accuracy.update_state(mean_acc)
                 else:
                     data, inp_seg = data
                     eval_step(data, inp_seg)
