@@ -394,26 +394,14 @@ def distributed_train_step(dataset_inputs):
 
     data, segs = dataset_inputs
     per_example_losses, per_example_accs = strategy.experimental_run_v2(train_step, args=(data, segs))
-    print('per_example_accs', per_example_accs)
-    print('per_example_losses:', per_example_losses)
     per_example_accs = strategy.experimental_local_results(per_example_accs)
     per_example_losses = strategy.experimental_local_results(per_example_losses)
-
-    print('after per_example_accs', per_example_accs)
-    print('after per_example_losses:', per_example_losses)
 
     per_example_losses = tf.cast(list(per_example_losses), tf.float32)
     per_example_accs = tf.cast(list(per_example_accs), tf.float32)
     
-    print('afterx2 per_example_accs', per_example_accs)
-    print('afterx2 per_example_losses:', per_example_losses)
-
     mean_loss = tf.reduce_mean(per_example_losses) #  strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
     mean_acc = tf.reduce_mean(per_example_accs) # strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
-    
-    train_loss.update_state(mean_loss)
-    train_accuracy.update_state(mean_acc)
-    
     return mean_loss, mean_acc
 
 @tf.function
@@ -423,25 +411,14 @@ def distributed_eval_step(dataset_inputs):
     data, segs = dataset_inputs
     per_example_losses, per_example_accs = strategy.experimental_run_v2(eval_step, args=(data, segs))
 
-    print('per_example_accs', per_example_accs)
-    print('per_example_losses:', per_example_losses)
     per_example_accs = strategy.experimental_local_results(per_example_accs)
     per_example_losses = strategy.experimental_local_results(per_example_losses)
-
-    print('after per_example_accs', per_example_accs)
-    print('after per_example_losses:', per_example_losses)
 
     per_example_losses = tf.cast(list(per_example_losses), tf.float32)
     per_example_accs = tf.cast(list(per_example_accs), tf.float32)
     
-    print('afterx2 per_example_accs', per_example_accs)
-    print('afterx2 per_example_losses:', per_example_losses)
-
     mean_loss = tf.reduce_mean(per_example_losses) #  strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
     mean_acc = tf.reduce_mean(per_example_accs) # strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
-
-    eval_loss.update_state(mean_loss)
-    eval_accuracy.update_state(mean_acc)
     return mean_loss, mean_acc
 
 def print_stats(args, epoch, stage, batch_idx, loss, acc, log):
@@ -510,7 +487,9 @@ def train_gec():
             for batch_idx, data in enumerate(train_dataset):
                 
                 if args.use_tpu:
-                    distributed_train_step(data)
+                    mean_loss, mean_acc = distributed_train_step(data)
+                    train_loss.update_state(mean_loss)
+                    train_accuracy.update_state(mean_acc)
                 else:
                     data, inp_seg = data
                     train_step(data, inp_seg)
@@ -531,7 +510,9 @@ def train_gec():
             for batch_idx, data in enumerate(dev_dataset):
                 
                 if args.use_tpu:
-                   distributed_eval_step(data)
+                    mean_loss, mean_acc = distributed_eval_step(data)
+                    eval_loss.update_state(mean_loss)
+                    eval_accuracy.update_state(mean_acc)
                 else:
                     data, inp_seg = data
                     eval_step(data, inp_seg)
