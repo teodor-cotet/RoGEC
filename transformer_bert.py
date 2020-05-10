@@ -400,6 +400,8 @@ def distributed_train_step(dataset_inputs):
 
     per_example_losses = tf.stack(per_example_losses.values, axis=0)
     per_example_accs = tf.stack(per_example_accs.values, axis=0)
+    print('per_example_losses', per_example_losses)
+
     # print('per_example_losses', per_example_losses)
 
     # mean_loss = tf.math.reduce_sum(per_example_losses) #  strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
@@ -421,7 +423,7 @@ def distributed_eval_step(dataset_inputs):
 
     per_example_losses = tf.stack(per_example_losses.values, axis=0)
     per_example_accs = tf.stack(per_example_accs.values, axis=0)
-    
+    print('per_example_losses', per_example_losses)
     # mean_loss = tf.math.reduce_sum(per_example_losses) #  strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
     # mean_acc = tf.math.reduce_sum(per_example_accs) # strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0
     mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
