@@ -119,7 +119,7 @@ if args.decode_mode:
     args.batch_size = args.beam
     
 tokenizer_pt, tokenizer_en, tokenizer_ro, tokenizer_bert = None, None, None, None
-transformer, optimizer, train_loss, train_accuracy = None, None, None, None
+transformer, optimizer = None, None
 lm_model = None
 eval_loss, eval_accuracy = None, None
 strategy = None
@@ -156,7 +156,6 @@ def correct_gec(sentence: str, plot=''):
     candidates = []
     for beam in beams:
         sentence_ids = []
-        print(beam.ids)
         for i in beam.ids:
             if i < tokenizer_ro.vocab_size:
                 sentence_ids.append(i)
@@ -316,7 +315,6 @@ def loss_function(real, pred):
     mask_sum = tf.cast(tf.reduce_sum(mask), tf.float32)
 
     loss_reduced = tf.divide(loss_sum, mask_sum)
-    # loss_reduced = tf.reduce_sum(loss_)
     return loss_reduced
 
 def acc_function(real, pred):
@@ -331,13 +329,12 @@ def acc_function(real, pred):
 
     sum_mask = tf.cast(tf.reduce_sum(mask), tf.float32)
     sum_masked_eq = tf.cast(tf.reduce_sum(eq * mask), tf.float32)
-    # accuracy = sum_masked_eq
     accuracy = tf.divide(sum_masked_eq, sum_mask)
     return accuracy
 
-@tf.function(input_signature=train_step_signature, experimental_compile=False)
+@tf.function(input_signature=train_step_signature)
 def train_step(data, inp_segs):
-    global transformer, optimizer, train_accuracy, strategy, train_loss
+    global transformer, optimizer, strategy
     # batch, seq_length
     inp, tar = data[:, 0], data[:, 1]
     tar_inp = tar[:, :-1]
@@ -365,12 +362,9 @@ def train_step(data, inp_segs):
     acc = acc_function(tar_real, predictions)
 
     tf.compat.v1.logging.info('transformer summary: {}'.format(transformer.summary()))
-    if args.use_tpu == False:
-        train_loss.update_state(loss)
-        train_accuracy.update_state(acc)
     return loss, acc
 
-@tf.function(input_signature=eval_step_signature, experimental_compile=False)
+@tf.function(input_signature=eval_step_signature)
 def eval_step(data, inp_segs):
     global transformer, optimizer, eval_accuracy, eval_loss
     inp, tar = data[:, 0], data[:, 1]
@@ -392,17 +386,11 @@ def eval_step(data, inp_segs):
                                     combined_mask, 
                                     dec_padding_mask)
         loss = loss_function(tar_real, predictions)
-    
     acc = acc_function(tar_real, predictions)
-    if args.use_tpu == False:
-        eval_loss.update_state(loss)
-        eval_accuracy.update_state(acc)
     return loss, acc 
 
 @tf.function
 def distributed_train_step(dataset_inputs):
-    global train_loss, train_accuracy
-
     data, segs = dataset_inputs
     per_example_losses, per_example_accs = strategy.experimental_run_v2(train_step, args=(data, segs))
 
@@ -415,8 +403,6 @@ def distributed_train_step(dataset_inputs):
 
 @tf.function
 def distributed_eval_step(dataset_inputs):
-    global eval_loss, eval_accuracy
-
     data, segs = dataset_inputs
     per_example_losses, per_example_accs = strategy.experimental_run_v2(eval_step, args=(data, segs))
 
@@ -443,7 +429,7 @@ def print_stats(args, epoch, stage, batch_idx, loss, acc, log):
         log.flush()
 
 def train_gec():
-    global args, optimizer, transformer, train_loss, train_accuracy, eval_loss, eval_accuracy, strategy
+    global args, optimizer, transformer, strategy
     
     with open(args.info, 'wt') as log:
         
@@ -461,11 +447,6 @@ def train_gec():
            train_dataset = strategy.experimental_distribute_dataset(train_dataset)
            dev_dataset = strategy.experimental_distribute_dataset(dev_dataset)
 
-        train_loss = tf.keras.metrics.Mean(name='train_loss')
-        train_accuracy = tf.keras.metrics.Mean(name='train_accuracy')
-        eval_loss = tf.keras.metrics.Mean(name='eval_loss')
-        eval_accuracy = tf.keras.metrics.Mean(name='eval_accuracy')
-
         transformer, optimizer = get_model_gec()
       
         # object you want to checkpoint are saved as attributes of the checkpoint obj
@@ -482,7 +463,7 @@ def train_gec():
             tf.compat.v1.logging.info('latest checkpoint restored {}'.format(args.checkpoint_path))
 
         tf.compat.v1.logging.info('starting training...')
-        eval_losses, train_losses, eval_accs, train_accs = [], [], [], []
+        eval_losses, train_losses, eval_accuracies, train_accuracies = [], [], [], []
 
         for epoch in range(args.epochs):
             # train 
@@ -490,17 +471,14 @@ def train_gec():
                 
                 if args.use_tpu:
                     mean_loss, mean_acc = distributed_train_step(data)
-                    train_losses.append(mean_loss)
-                    train_accs.append(mean_acc)
                 else:
                     data, inp_seg = data
-                    train_step(data, inp_seg)
+                    mean_loss, mean_acc = train_step(data, inp_seg)
+                train_losses.append(mean_loss)
+                train_accuracies.append(mean_acc)
 
-                # print_stats(args, epoch=epoch, stage='train', batch_idx=batch_idx,
-                #              loss=train_loss.result(), acc=train_accuracy.result(), log=log)
             train_loss = tf.reduce_mean(train_losses).numpy()
-            train_accuracy = tf.reduce_mean(train_accs).numpy()
-
+            train_accuracy = tf.reduce_mean(train_accuracies).numpy()
             print_stats(args, epoch=epoch, stage='train', batch_idx=None, 
                              loss=train_loss, acc=train_accuracy, log=log)
 
@@ -509,23 +487,21 @@ def train_gec():
                 log.write('Saving checkpoint for epoch {} at {} \n'.format(epoch+1,
                                                                     ckpt_save_path))
                 log.flush()
-
+                tf.compat.v1.logging.info('Saving checkpoint for epoch {} at {} \n'.format(epoch+1,
+                                                                    ckpt_save_path))
             # eval
             for batch_idx, data in enumerate(dev_dataset):
                 
                 if args.use_tpu:
                     mean_loss, mean_acc = distributed_eval_step(data)
-                    eval_losses.append(mean_loss)
-                    eval_accs.append(mean_acc)
                 else:
                     data, inp_seg = data
-                    eval_step(data, inp_seg)
+                    mean_loss, mean_acc = eval_step(data, inp_seg)
+                eval_losses.append(mean_loss)
+                eval_accuracies.append(mean_acc)
 
-                # print_stats(args, epoch=epoch, stage='dev', batch_idx=batch_idx, 
-                #            loss=eval_loss.result(), acc=eval_accuracy.result(), log=log)
             eval_loss = tf.reduce_mean(eval_losses).numpy()
-            eval_accuracy = tf.reduce_mean(eval_accs).numpy()
-
+            eval_accuracy = tf.reduce_mean(eval_accuracies).numpy()
             print_stats(args, epoch=epoch, stage='dev', batch_idx=None, 
                              loss=eval_loss, acc=eval_accuracy, log=log)
 
@@ -554,12 +530,6 @@ def run_main():
 def main(argv):
     del argv
     global args, strategy
-    tf.compat.v1.logging.info('Devices: {}'.format(tf.config.list_physical_devices('CPU')))
-    for dev in tf.config.list_physical_devices('CPU'):
-        if dev.name.find('XLA') >= 0:
-            continue 
-        tf.config.set_visible_devices(dev, 'CPU')
-
     if args.use_tpu == True:
         tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(args.tpu,
              zone=args.tpu_zone, project=args.gcp_project)
