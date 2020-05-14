@@ -192,7 +192,8 @@ def init_beam(vocab_size, end_token_id, beam_width=1):
 
 def generate_sentence_beam(inp_sentence: str):
     global tokenizer_ro, tokenizer_bert, transformer, optimizer, args
-
+    inp_sentence = inp_sentence.strip()
+    
     if tokenizer_ro is None or (args.bert and tokenizer_bert is None):
         tokenizer_ro, tokenizer_bert = get_tokenizers_ckeckpoint(args)
 
@@ -332,86 +333,6 @@ def acc_function(real, pred):
     accuracy = tf.divide(sum_masked_eq, sum_mask)
     return accuracy
 
-@tf.function(input_signature=train_step_signature)
-def train_step(data, inp_segs):
-    global transformer, optimizer, strategy
-    # batch, seq_length
-    inp, tar = data[:, 0], data[:, 1]
-    tar_inp = tar[:, :-1]
-    tar_real = tar[:, 1:]
-    enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
-    
-    with tf.GradientTape() as tape:
-        if args.bert is True:
-            predictions, _ = transformer(inp, inp_segs, tar_inp, 
-                                    True, 
-                                    enc_padding_mask, 
-                                    combined_mask, 
-                                    dec_padding_mask)
-        else:
-            predictions, _ = transformer(inp, tar_inp, 
-                                    True, 
-                                    enc_padding_mask, 
-                                    combined_mask, 
-                                    dec_padding_mask)
-        loss = loss_function(tar_real, predictions)
-    
-    gradients = tape.gradient(loss, transformer.trainable_variables)
-    optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
-
-    acc = acc_function(tar_real, predictions)
-
-    tf.compat.v1.logging.info('transformer summary: {}'.format(transformer.summary()))
-    return loss, acc
-
-@tf.function(input_signature=eval_step_signature)
-def eval_step(data, inp_segs):
-    global transformer, optimizer, eval_accuracy, eval_loss
-    inp, tar = data[:, 0], data[:, 1]
-    tar_inp = tar[:, :-1]
-    tar_real = tar[:, 1:]
-    enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
-
-    with tf.GradientTape() as tape:
-        if args.bert:
-            predictions, _ = transformer(inp, inp_segs, tar_inp, 
-                                    True, 
-                                    enc_padding_mask, 
-                                    combined_mask, 
-                                    dec_padding_mask)
-        else:
-            predictions, _ = transformer(inp, tar_inp, 
-                                    True, 
-                                    enc_padding_mask, 
-                                    combined_mask, 
-                                    dec_padding_mask)
-        loss = loss_function(tar_real, predictions)
-    acc = acc_function(tar_real, predictions)
-    return loss, acc 
-
-@tf.function
-def distributed_train_step(dataset_inputs):
-    data, segs = dataset_inputs
-    per_example_losses, per_example_accs = strategy.experimental_run_v2(train_step, args=(data, segs))
-
-    per_example_losses = tf.stack(per_example_losses.values, axis=0)
-    per_example_accs = tf.stack(per_example_accs.values, axis=0)
-
-    mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
-    mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
-    return mean_loss, mean_acc
-
-@tf.function
-def distributed_eval_step(dataset_inputs):
-    data, segs = dataset_inputs
-    per_example_losses, per_example_accs = strategy.experimental_run_v2(eval_step, args=(data, segs))
-
-    per_example_losses = tf.stack(per_example_losses.values, axis=0)
-    per_example_accs = tf.stack(per_example_accs.values, axis=0)
-
-    mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
-    mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
-    return mean_loss, mean_acc
 
 def print_stats(args, epoch, stage, batch_idx, loss, acc, log):
     if batch_idx is not None:
@@ -431,6 +352,88 @@ def print_stats(args, epoch, stage, batch_idx, loss, acc, log):
 def train_gec():
     global args, optimizer, transformer, strategy
     
+    @tf.function(input_signature=train_step_signature)
+    def train_step(data, inp_segs):
+        global transformer, optimizer, strategy
+        # batch, seq_length
+        inp, tar = data[:, 0], data[:, 1]
+        tar_inp = tar[:, :-1]
+        tar_real = tar[:, 1:]
+        enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
+        
+        with tf.GradientTape() as tape:
+            if args.bert is True:
+                predictions, _ = transformer(inp, inp_segs, tar_inp, 
+                                        True, 
+                                        enc_padding_mask, 
+                                        combined_mask, 
+                                        dec_padding_mask)
+            else:
+                predictions, _ = transformer(inp, tar_inp, 
+                                        True, 
+                                        enc_padding_mask, 
+                                        combined_mask, 
+                                        dec_padding_mask)
+            loss = loss_function(tar_real, predictions)
+        
+        gradients = tape.gradient(loss, transformer.trainable_variables)
+        optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
+
+        acc = acc_function(tar_real, predictions)
+
+        tf.compat.v1.logging.info('transformer summary: {}'.format(transformer.summary()))
+        return loss, acc
+
+    @tf.function(input_signature=eval_step_signature)
+    def eval_step(data, inp_segs):
+        global transformer, optimizer, eval_accuracy, eval_loss
+        inp, tar = data[:, 0], data[:, 1]
+        tar_inp = tar[:, :-1]
+        tar_real = tar[:, 1:]
+        enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
+
+        with tf.GradientTape() as tape:
+            if args.bert:
+                predictions, _ = transformer(inp, inp_segs, tar_inp, 
+                                        True, 
+                                        enc_padding_mask, 
+                                        combined_mask, 
+                                        dec_padding_mask)
+            else:
+                predictions, _ = transformer(inp, tar_inp, 
+                                        True, 
+                                        enc_padding_mask, 
+                                        combined_mask, 
+                                        dec_padding_mask)
+            loss = loss_function(tar_real, predictions)
+        acc = acc_function(tar_real, predictions)
+        return loss, acc 
+
+    @tf.function
+    def distributed_train_step(dataset_inputs):
+        data, segs = dataset_inputs
+        per_example_losses, per_example_accs = strategy.experimental_run_v2(train_step, args=(data, segs))
+
+        per_example_losses = tf.stack(per_example_losses.values, axis=0)
+        per_example_accs = tf.stack(per_example_accs.values, axis=0)
+
+        mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
+        mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
+        return mean_loss, mean_acc
+
+    @tf.function
+    def distributed_eval_step(dataset_inputs):
+        data, segs = dataset_inputs
+        per_example_losses, per_example_accs = strategy.experimental_run_v2(eval_step, args=(data, segs))
+
+        per_example_losses = tf.stack(per_example_losses.values, axis=0)
+        per_example_accs = tf.stack(per_example_accs.values, axis=0)
+
+        mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
+        mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
+        return mean_loss, mean_acc
+
+
     with open(args.info, 'wt') as log:
         
         if args.use_txt:
