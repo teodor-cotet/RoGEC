@@ -102,7 +102,8 @@ tf.compat.v1.flags.DEFINE_string('checkpoint_path', default='', help='path to ch
 args = tf.compat.v1.flags.FLAGS
 
 if args.use_tpu:
-    args.subwords_path = os.path.join('gs://', args.bucket, args.checkpoint, 'tokenizer_ro')
+    #args.subwords_path = os.path.join('gs://', args.bucket, args.checkpoint, 'tokenizer_ro')
+    args.subwords_path = os.path.join(args.checkpoint, 'tokenizer_ro')
     args.checkpoint_path = os.path.join('gs://', args.bucket, args.checkpoint)
 else:
     args.subwords_path = os.path.join(args.checkpoint, 'tokenizer_ro')
