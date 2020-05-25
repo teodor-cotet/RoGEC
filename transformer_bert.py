@@ -451,18 +451,16 @@ def train_gec():
             train_dataset, dev_dataset, = get_ids_dataset_tf_records(args)
             train_dataset, dev_dataset = prepare_datasets(train_dataset, dev_dataset, args)
         
+        count_train, count_dev = 0, 0
         for sents, seg in train_dataset:
             count_train += 1
         for sents, seg in dev_dataset:
             count_dev += 1
         tf.compat.v1.logging.info('train samples: {} dev samples: {}'.format(count_train, count_dev))
 
-
         for sents, seg in train_dataset.take(1):
             tf.compat.v1.logging.info('input shapes: {} {}'.format(sents.shape, seg.shape))
             tf.compat.v1.logging.info('source: {} \n target: {} \n seg: {}\n'.format(sents[0][0], sents[0][1], seg[0]))
-        count_train, count_dev = 0, 0
-
            
         if args.use_tpu:
            train_dataset = strategy.experimental_distribute_dataset(train_dataset)
