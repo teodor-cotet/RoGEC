@@ -473,19 +473,16 @@ def train_gec():
             ckpt = tf.train.Checkpoint(decoder=transformer.decoder, 
                                         final_layer=transformer.final_layer, optimizer=optimizer)
         else:
-            ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
+            if args.reset_opt:
+                ckpt = tf.train.Checkpoint(transformer=transformer)
+            else:
+                ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
        
         ckpt_manager = tf.train.CheckpointManager(ckpt, args.checkpoint_path, max_to_keep=5)
         if ckpt_manager.latest_checkpoint:
             # loading mechanis matches variables from the tf graph and resotres their values
             ckpt.restore(ckpt_manager.latest_checkpoint)
             tf.compat.v1.logging.info('latest checkpoint restored {}'.format(args.checkpoint_path))
-
-        if args.reset_opt:
-            tf.compat.v1.logging.info('lr before reset: {}'.format(optimizer._decayed_lr(tf.float32)))
-            learning_rate = CustomSchedule(args.d_model)
-            optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, 
-                                        epsilon=1e-9)
 
         tf.compat.v1.logging.info('lr after reset: {}'.format(optimizer._decayed_lr(tf.float32)))
         tf.compat.v1.logging.info('starting training...')
