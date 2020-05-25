@@ -34,9 +34,16 @@ def construct_flat_datasets(args1, subwords_path):
     sample_train = int(args.total_samples * args.train_dev_split)
 
     if args.records:
+
         dataset = tf.data.Dataset.from_generator(generator_tensors_ids_and_segs,
                                         ((tf.int64, tf.int64), tf.int64), 
                                         ((tf.TensorShape([None]), tf.TensorShape([None])), tf.TensorShape([None])))
+        if args.separate:
+            train_dataset = dataset
+            dev_dataset = tf.data.Dataset.from_generator(generator_tensors_ids_and_segs_dev,
+                                        ((tf.int64, tf.int64), tf.int64), 
+                                        ((tf.TensorShape([None]), tf.TensorShape([None])), tf.TensorShape([None])))
+            return train_dataset, dev_dataset
     else:
         gen_dataset = generator_tensors_ids()
         dataset = list(gen_dataset)
@@ -53,7 +60,8 @@ def construct_flat_datasets(args1, subwords_path):
             dev_dataset = tf.data.Dataset.from_generator(generator_tensors_ids_dev,
                                             (tf.int64, tf.int64), 
                                             (tf.TensorShape([2, args.seq_length]), tf.TensorShape([args.seq_length])))
-            return dataset, dev_dataset                    
+            return dataset, dev_dataset  
+                              
     train_dataset = dataset.take(sample_train)
     dev_dataset = dataset.skip(sample_train)
 
@@ -224,7 +232,17 @@ def generator_tensors_ids_and_segs():
         
         yield (tf.convert_to_tensor(s, dtype=tf.int64), tf.convert_to_tensor(t, dtype=tf.int64)),\
                 tf.convert_to_tensor(segs, dtype=tf.int64)
-                
+
+def generator_tensors_ids_and_segs_dev():
+    global tokenizer_bert, tokenizer_ro, args
+
+    gen = generator_ids_dev(tokenizer_ro, tokenizer_bert, args)
+    for step, ((s, t), segs) in enumerate(gen):
+        if step % 10000 == 0:
+            tf.compat.v1.logging.info('tf record generation, step {}'.format(step))
+        
+        yield (tf.convert_to_tensor(s, dtype=tf.int64), tf.convert_to_tensor(t, dtype=tf.int64)),\
+                tf.convert_to_tensor(segs, dtype=tf.int64)   
 
 def get_text_samples(args) -> List[str]:
     gen = gec_generator_text(args)

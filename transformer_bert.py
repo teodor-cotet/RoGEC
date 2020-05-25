@@ -52,7 +52,7 @@ tf.compat.v1.flags.DEFINE_string('dataset_file_dev', default='corpora/cna/dev/de
 tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/10m_transformer_768',
                 help='Checpoint save locations, or restore')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/bert_ro_256/', help='path from where to load bert')
-tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/10m_bert_multi_768', help='path to tf records folder')
+tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/transformer_finetune', help='path to tf records folder')
 tf.compat.v1.flags.DEFINE_string('info', default='info.log', help='path to tf info file')
 
 # mode of execution
