@@ -47,8 +47,9 @@ tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from whe
 
 
 # paths for datasets  1k_clean_dirty_better.txt 30k_clean_dirty_better.txt 10_mil_dirty_clean_better.txt
-tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/synthetic_wiki/30k_clean_dirty_better.txt', help='')
-tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/30k_transformer_64',
+tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/cna/train/train_combined.txt', help='')
+tf.compat.v1.flags.DEFINE_string('dataset_file_dev', default='corpora/cna/dev/dev_combined.txt', help='')
+tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/10m_transformer_768',
                 help='Checpoint save locations, or restore')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/bert_ro_256/', help='path from where to load bert')
 tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/10m_bert_multi_768', help='path to tf records folder')
@@ -60,7 +61,8 @@ tf.compat.v1.flags.DEFINE_bool('bert', default=False, help='use bert as encoder 
 tf.compat.v1.flags.DEFINE_bool('records', default=False, help='generate tf records files + tokenizers (in path tf_records)')
 tf.compat.v1.flags.DEFINE_bool('train_mode', default=False, help='do training')
 tf.compat.v1.flags.DEFINE_bool('decode_mode',default=False, help='do prediction, decoding')
-tf.compat.v1.flags.DEFINE_bool('use_txt', default=False, help='dataset from txt file args.dataset_file')
+tf.compat.v1.flags.DEFINE_bool('separate', default=True, help='separate dev and training dataset')
+tf.compat.v1.flags.DEFINE_bool('use_txt', default=True, help='dataset from txt file args.dataset_file')
 
 # model params
 tf.compat.v1.flags.DEFINE_integer('num_layers', default=6, help='')
@@ -73,22 +75,25 @@ tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
 tf.compat.v1.flags.DEFINE_integer('dict_size', default=(2**15), help='')
 tf.compat.v1.flags.DEFINE_integer('epochs', default=500, help='')
 tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(4 * 1024 * 1024), help='')
-tf.compat.v1.flags.DEFINE_integer('batch_size', default=256, help='')
-tf.compat.v1.flags.DEFINE_float('train_dev_split', default=0.97, help='')
+tf.compat.v1.flags.DEFINE_integer('batch_size', default=1, help='')
+tf.compat.v1.flags.DEFINE_float('train_dev_split', default=1.0, help='')
 tf.compat.v1.flags.DEFINE_integer('total_samples', default=10000000, help='')
 tf.compat.v1.flags.DEFINE_bool('show_batch_stats', default=True, help='do prediction, decoding')
+tf.compat.v1.flags.DEFINE_bool('reset_opt', default=False, help='reset optimizer when training')
 
 # deconding 100k_wiki_clean.arpa 30m_wiki_clean.arpa
 tf.compat.v1.flags.DEFINE_integer('beam', default=4, help='beam width')
-tf.compat.v1.flags.DEFINE_integer('max_seq_decoding', default=768, help='max length of the decoding sequence')
 tf.compat.v1.flags.DEFINE_string('lm_path', default='/media/teo/drive hdd/gec/corpora/wiki_synthetic/arpa/100k_wiki_clean.arpa', 
             help='path to the the the language model arpa file')
 tf.compat.v1.flags.DEFINE_bool('normalize', default=False, help='normalize reranking by sentence length')
+tf.compat.v1.flags.DEFINE_bool('normalize_beam', default=False, help='normalize  beam by length')
+tf.compat.v1.flags.DEFINE_bool('lm', default=False, help='use language model for reranking')
+tf.compat.v1.flags.DEFINE_integer('max_seq_decoding', default=768, help='max length of the decoding sequence')
 tf.compat.v1.flags.DEFINE_float('weight_lm', default=1., help='weight of the LM in decoding (should be in [0, 2])')
 
 # for prediction purposes only
-tf.compat.v1.flags.DEFINE_string('in_file_decode', default='corpora/synthetic_wiki/50_wiki_dirty.txt', help='')
-tf.compat.v1.flags.DEFINE_string('out_file_decode', default='corpora/synthetic_wiki/50_wiki_predicted.txt', help='')
+tf.compat.v1.flags.DEFINE_string('in_file_decode', default='corpora/cna/dev/dev_combined_wronged.txt', help='')
+tf.compat.v1.flags.DEFINE_string('out_file_decode', default='corpora/cna/dev/dev_combined_predicted.txt', help='')
 
 # dummy values
 tf.compat.v1.flags.DEFINE_string('subwords_path', default='', help='path to subwords path')
@@ -100,7 +105,7 @@ if args.use_tpu:
     args.subwords_path = os.path.join('gs://', args.bucket, args.checkpoint, 'corpora')
     args.checkpoint_path = os.path.join('gs://', args.bucket, args.checkpoint)
 else:
-    args.subwords_path = os.path.join(args.checkpoint, 'corpora')
+    args.subwords_path = os.path.join(args.checkpoint, 'tokenizer_ro')
     args.checkpoint_path = args.checkpoint
 
 
@@ -141,8 +146,10 @@ class Beam(namedtuple("Beam", ["log_prob", "ids", "length"])):
 def correct_from_file(in_file: str, out_file: str):
     with open(in_file, 'r') as fin, open(out_file, 'w') as fout:
         for line in fin:
-            print('original: {}'.format(line))
+            print('original: ', line)
             predicted_sentences = correct_gec(line)
+            fout.write(predicted_sentences.strip())
+            fout.write('\n')
 
 def correct_gec(sentence: str, plot=''):
     global tokenizer_ro, lm_model
@@ -162,19 +169,22 @@ def correct_gec(sentence: str, plot=''):
             if i == tokenizer_ro.vocab_size + 1:
                 break
         predicted_sentence = tokenizer_ro.decode(sentence_ids)
-        print('pred: {}'.format(predicted_sentence))
         lm_prob = lm_model.score(predicted_sentence, bos=True, eos=True)
 
         if args.normalize:
-            cand_prob = beam.log_prob + args.weight_lm * lm_prob * (1.0/beam.length)
+            cand_prob = beam.log_prob + 10 * args.weight_lm * lm_prob * (1.0/beam.length)
         else:
             cand_prob = beam.log_prob + args.weight_lm * lm_prob
+        candidates.append((cand_prob, predicted_sentence))
+        print('pred: {} beam p: {} lm: {} final: {}'.format(predicted_sentence, beam.log_prob, lm_prob, cand_prob))
 
-    return predicted_sentence
+    candidates = sorted(candidates, key = lambda x: x[0], reverse=True)
+    print('chosen: ', candidates[0][1])
+    return candidates[0][1]
 
 def init_beam(vocab_size, end_token_id, beam_width=1):
     
-    length_penalty = 0.6 if args.normalize else 0.0
+    length_penalty = 0.6 if args.normalize_beam else 0.0
     config = beam_search.BeamSearchConfig(
         beam_width=beam_width,
         vocab_size=vocab_size,
@@ -433,9 +443,7 @@ def train_gec():
         mean_acc = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_accs, axis=0)
         return mean_loss, mean_acc
 
-
     with open(args.info, 'wt') as log:
-        
         if args.use_txt:
             train_dataset, dev_dataset = construct_datasets_gec(args, args.subwords_path)
         else:
@@ -445,13 +453,20 @@ def train_gec():
         for sents, seg in train_dataset.take(1):
             tf.compat.v1.logging.info('input shapes: {} {}'.format(sents.shape, seg.shape))
             tf.compat.v1.logging.info('source: {} \n target: {} \n seg: {}\n'.format(sents[0][0], sents[0][1], seg[0]))
+        count_train, count_dev = 0, 0
+
+        if args.use_txt:
+            for sents, seg in train_dataset:
+                count_train += 1
+            for sents, seg in dev_dataset:
+                count_dev += 1
+            tf.compat.v1.logging.info('train samples: {} dev samples: {}'.format(count_train, count_dev))
 
         if args.use_tpu:
            train_dataset = strategy.experimental_distribute_dataset(train_dataset)
            dev_dataset = strategy.experimental_distribute_dataset(dev_dataset)
 
         transformer, optimizer = get_model_gec()
-      
         # object you want to checkpoint are saved as attributes of the checkpoint obj
         if args.bert:
             ckpt = tf.train.Checkpoint(decoder=transformer.decoder, 
@@ -465,6 +480,13 @@ def train_gec():
             ckpt.restore(ckpt_manager.latest_checkpoint)
             tf.compat.v1.logging.info('latest checkpoint restored {}'.format(args.checkpoint_path))
 
+        if args.reset_opt:
+            tf.compat.v1.logging.info('lr before reset: {}'.format(optimizer._decayed_lr(tf.float32)))
+            learning_rate = CustomSchedule(args.d_model)
+            optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, 
+                                        epsilon=1e-9)
+
+        tf.compat.v1.logging.info('lr after reset: {}'.format(optimizer._decayed_lr(tf.float32)))
         tf.compat.v1.logging.info('starting training...')
         eval_losses, train_losses, eval_accuracies, train_accuracies = [], [], [], []
 
@@ -507,6 +529,8 @@ def train_gec():
             eval_accuracy = tf.reduce_mean(eval_accuracies).numpy()
             print_stats(args, epoch=epoch, stage='dev', batch_idx=None, 
                              loss=eval_loss, acc=eval_accuracy, log=log)
+                             
+            tf.compat.v1.logging.info('lr : {}'.format(optimizer._decayed_lr(tf.float32)))
 
 def run_main():
     if args.records:
