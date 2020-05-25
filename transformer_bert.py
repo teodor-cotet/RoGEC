@@ -28,7 +28,7 @@ import beam_search
 
 # TPU cloud params
 tf.compat.v1.flags.DEFINE_string(
-    "tpu", default='teodor-cotet',
+    "tpu", default='gec',
     help="The Cloud TPU to use for training. This should be either the name "
     "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 "
     "url.")
@@ -102,7 +102,7 @@ tf.compat.v1.flags.DEFINE_string('checkpoint_path', default='', help='path to ch
 args = tf.compat.v1.flags.FLAGS
 
 if args.use_tpu:
-    args.subwords_path = os.path.join('gs://', args.bucket, args.checkpoint, 'corpora')
+    args.subwords_path = os.path.join('gs://', args.bucket, args.checkpoint, 'tokenizer_ro')
     args.checkpoint_path = os.path.join('gs://', args.bucket, args.checkpoint)
 else:
     args.subwords_path = os.path.join(args.checkpoint, 'tokenizer_ro')
@@ -529,7 +529,7 @@ def train_gec():
             eval_accuracy = tf.reduce_mean(eval_accuracies).numpy()
             print_stats(args, epoch=epoch, stage='dev', batch_idx=None, 
                              loss=eval_loss, acc=eval_accuracy, log=log)
-                             
+
             tf.compat.v1.logging.info('lr : {}'.format(optimizer._decayed_lr(tf.float32)))
 
 def run_main():
