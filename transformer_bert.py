@@ -145,7 +145,7 @@ class Beam(namedtuple("Beam", ["log_prob", "ids", "length"])):
   pass
 
 def correct_from_file(in_file: str, out_file: str):
-    with open(in_file, 'r') as fin, open(out_file, 'w') as fout:
+    with open(in_file, 'r', encoding='utf-8') as fin, open(out_file, 'w', encoding='utf-8') as fout:
         for line in fin:
             print('original: ', line)
             predicted_sentences = correct_gec(line)
