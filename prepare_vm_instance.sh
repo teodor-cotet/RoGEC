@@ -1,6 +1,5 @@
 pip3 install bert-for-tf2
 pip3 install google-cloud-storage
-cd RoGEC 
 mkdir -p checkpoints/10m_transformer_768_finetune
 mkdir -p checkpoints/10m_transformer_768_retrain
 mkdir -p checkpoints/10m_transformer_768
