@@ -1,4 +1,3 @@
-git clone https://github.com/TeodorMihai/RoGEC.git
 pip3 install bert-for-tf2
 pip3 install google-cloud-storage
 cd RoGEC 
