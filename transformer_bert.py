@@ -49,7 +49,7 @@ tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from whe
 # paths for datasets  1k_clean_dirty_better.txt 30k_clean_dirty_better.txt 10_mil_dirty_clean_better.txt
 tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/cna/train/train_combined.txt', help='')
 tf.compat.v1.flags.DEFINE_string('dataset_file_dev', default='corpora/cna/dev/dev_combined.txt', help='')
-tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/10m_transformer_768',
+tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/10m_transformer_768_retrain',
                 help='Checpoint save locations, or restore')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/bert_ro_256/', help='path from where to load bert')
 tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/transformer_finetune', help='path to tf records folder')
@@ -62,7 +62,7 @@ tf.compat.v1.flags.DEFINE_bool('records', default=False, help='generate tf recor
 tf.compat.v1.flags.DEFINE_bool('train_mode', default=False, help='do training')
 tf.compat.v1.flags.DEFINE_bool('decode_mode',default=False, help='do prediction, decoding')
 tf.compat.v1.flags.DEFINE_bool('separate', default=True, help='separate dev and training dataset')
-tf.compat.v1.flags.DEFINE_bool('use_txt', default=True, help='dataset from txt file args.dataset_file')
+tf.compat.v1.flags.DEFINE_bool('use_bucket', default=True, help='use checkpoints from bucket')
 
 # model params
 tf.compat.v1.flags.DEFINE_integer('num_layers', default=6, help='')
@@ -82,18 +82,18 @@ tf.compat.v1.flags.DEFINE_bool('show_batch_stats', default=True, help='do predic
 tf.compat.v1.flags.DEFINE_bool('reset_opt', default=False, help='reset optimizer when training')
 
 # deconding 100k_wiki_clean.arpa 30m_wiki_clean.arpa
-tf.compat.v1.flags.DEFINE_integer('beam', default=4, help='beam width')
+tf.compat.v1.flags.DEFINE_integer('beam', default=8, help='beam width')
 tf.compat.v1.flags.DEFINE_string('lm_path', default='/media/teo/drive hdd/gec/corpora/wiki_synthetic/arpa/100k_wiki_clean.arpa', 
             help='path to the the the language model arpa file')
-tf.compat.v1.flags.DEFINE_bool('normalize', default=False, help='normalize reranking by sentence length')
+tf.compat.v1.flags.DEFINE_bool('normalize_lm', default=False, help='normalize reranking by sentence length')
 tf.compat.v1.flags.DEFINE_bool('normalize_beam', default=False, help='normalize  beam by length')
 tf.compat.v1.flags.DEFINE_bool('lm', default=False, help='use language model for reranking')
 tf.compat.v1.flags.DEFINE_integer('max_seq_decoding', default=768, help='max length of the decoding sequence')
 tf.compat.v1.flags.DEFINE_float('weight_lm', default=1., help='weight of the LM in decoding (should be in [0, 2])')
 
 # for prediction purposes only
-tf.compat.v1.flags.DEFINE_string('in_file_decode', default='corpora/cna/dev/dev_combined_wronged.txt', help='')
-tf.compat.v1.flags.DEFINE_string('out_file_decode', default='corpora/cna/dev/dev_combined_predicted.txt', help='')
+tf.compat.v1.flags.DEFINE_string('in_file_decode', default='corpora/cna/dev/dev_phrase_wronged.txt', help='')
+tf.compat.v1.flags.DEFINE_string('out_file_decode', default='corpora/cna/dev/raw_beam8_b/dev_phrase_predicted.txt', help='')
 
 # dummy values
 tf.compat.v1.flags.DEFINE_string('subwords_path', default='', help='path to subwords path')
@@ -101,7 +101,7 @@ tf.compat.v1.flags.DEFINE_string('checkpoint_path', default='', help='path to ch
 
 args = tf.compat.v1.flags.FLAGS
 
-if args.use_tpu:
+if args.use_tpu or args.use_bucket:
     #args.subwords_path = os.path.join('gs://', args.bucket, args.checkpoint, 'tokenizer_ro')
     args.subwords_path = os.path.join(args.checkpoint, 'tokenizer_ro')
     args.checkpoint_path = os.path.join('gs://', args.bucket, args.checkpoint)
@@ -171,11 +171,14 @@ def correct_gec(sentence: str, plot=''):
                 break
         predicted_sentence = tokenizer_ro.decode(sentence_ids)
         lm_prob = lm_model.score(predicted_sentence, bos=True, eos=True)
-
-        if args.normalize:
-            cand_prob = beam.log_prob + 10 * args.weight_lm * lm_prob * (1.0/beam.length)
+        if args.lm:
+            if args.normalize_lm:
+                cand_prob = beam.log_prob + 10 * args.weight_lm * lm_prob * (1.0/beam.length)
+            else:
+                cand_prob = beam.log_prob + args.weight_lm * lm_prob
         else:
-            cand_prob = beam.log_prob + args.weight_lm * lm_prob
+            cand_prob = beam.log_prob
+
         candidates.append((cand_prob, predicted_sentence))
         print('pred: {} beam p: {} lm: {} final: {}'.format(predicted_sentence, beam.log_prob, lm_prob, cand_prob))
 
