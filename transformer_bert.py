@@ -62,7 +62,7 @@ tf.compat.v1.flags.DEFINE_bool('records', default=False, help='generate tf recor
 tf.compat.v1.flags.DEFINE_bool('train_mode', default=False, help='do training')
 tf.compat.v1.flags.DEFINE_bool('decode_mode',default=False, help='do prediction, decoding')
 tf.compat.v1.flags.DEFINE_bool('separate', default=True, help='separate dev and training dataset')
-tf.compat.v1.flags.DEFINE_bool('use_bucket', default=True, help='use checkpoints from bucket')
+tf.compat.v1.flags.DEFINE_bool('use_bucket', default=False, help='use checkpoints from bucket')
 
 # model params
 tf.compat.v1.flags.DEFINE_integer('num_layers', default=6, help='')
@@ -148,9 +148,11 @@ def correct_from_file(in_file: str, out_file: str):
     with open(in_file, 'r', encoding='utf-8') as fin, open(out_file, 'w', encoding='utf-8') as fout:
         for line in fin:
             print('original: ', line)
-            predicted_sentences = correct_gec(line)
-            fout.write(predicted_sentences.strip())
+            predicted_sentence = correct_gec(line)
+            print('written: ', predicted_sentence)
+            fout.write(predicted_sentence.strip())
             fout.write('\n')
+            fout.flush()
 
 def correct_gec(sentence: str, plot=''):
     global tokenizer_ro, lm_model
