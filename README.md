@@ -4,9 +4,9 @@ This repository contains the code and data for: romanian grammatical error corre
 
 ## Download Data & pre-trained models  
 Download the language model: [30mil_wiki_lm](https://nextcloud.readerbench.com/index.php/s/A6WpryeETrj7bJ6)  
-Download the RONACC corpus: [RONACC][TODO]  
-Download the synthetic corpus [10m_synthetic][https://nextcloud.readerbench.com/index.php/s/ijWCYZCwR9TM54d/download]  
-Download trained Transformer-based fine-tune model: [transformer-base-fine-tune][https://nextcloud.readerbench.com/index.php/s/CPAS95MNyZGsKas]  
+Download the RONACC corpus: [RONACC][TODO]    
+Download the synthetic corpus [10m_synthetic](https://nextcloud.readerbench.com/index.php/s/ijWCYZCwR9TM54d/download)   
+Download trained Transformer-based fine-tune model: [transformer-base-fine-tune](https://nextcloud.readerbench.com/index.php/s/CPAS95MNyZGsKas)   
 
 ## Run Experiment  
 
