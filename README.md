@@ -4,15 +4,15 @@ This repository contains the code and data for: romanian grammatical error corre
 
 ## Download Data & pre-trained models
 Download the language model: [30mil_wiki_lm](https://nextcloud.readerbench.com/index.php/s/A6WpryeETrj7bJ6)
-Download the RONACC corpus: [RONACC]https://nextcloud.readerbench.com/index.php/s/9pwymesT5sycxoM]
-Download the synthetic corpus [10m_synthetic][]
-Download trained Transformer-based fine-tune model: [transformer-base-fine-tune][https://nextcloud.readerbench.com/index.php/s/CPAS95MNyZGsKas]
+Download the RONACC corpus: [RONACC]https://nextcloud.readerbench.com/index.php/s/9pwymesT5sycxoM]\\
+Download the synthetic corpus [10m_synthetic][]\\
+Download trained Transformer-based fine-tune model: [transformer-base-fine-tune][https://nextcloud.readerbench.com/index.php/s/CPAS95MNyZGsKas]\\
 
 ## Run Experiment
 
-Install python dependencies:
-`pip3 install -r requirements.txt`
-If you want to use LM predictions install kenlm libraries: [kenlm](https://github.com/kpu/kenlm)
+Install python dependencies:\\
+`pip3 install -r requirements.txt`\\
+If you want to use LM predictions install kenlm libraries: [kenlm](https://github.com/kpu/kenlm)\\
 To run decoding on an existing model run:
 `python3 transformer_bert.py --checkpoint=path_to_model_checkpoint --lm_path=path_to_lm --d_model=size_of_model --decode_mode=True`
     (the size of the fine tuned model is 768)
