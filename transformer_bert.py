@@ -49,10 +49,10 @@ tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from whe
 # paths for datasets  1k_clean_dirty_better.txt 30k_clean_dirty_better.txt 10_mil_dirty_clean_better.txt
 tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/cna/train/train_combined.txt', help='')
 tf.compat.v1.flags.DEFINE_string('dataset_file_dev', default='corpora/cna/dev/dev_combined.txt', help='')
-tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/10m_transformer_768_retrain',
+tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/ronac_transformer_128_small_train',
                 help='Checpoint save locations, or restore')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/bert_ro_256/', help='path from where to load bert')
-tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/transformer_finetune', help='path to tf records folder')
+tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/transformer_finetune_128', help='path to tf records folder')
 tf.compat.v1.flags.DEFINE_string('info', default='info.log', help='path to tf info file')
 
 # mode of execution
@@ -63,6 +63,7 @@ tf.compat.v1.flags.DEFINE_bool('train_mode', default=False, help='do training')
 tf.compat.v1.flags.DEFINE_bool('decode_mode',default=False, help='do prediction, decoding')
 tf.compat.v1.flags.DEFINE_bool('separate', default=True, help='separate dev and training dataset')
 tf.compat.v1.flags.DEFINE_bool('use_bucket', default=False, help='use checkpoints from bucket')
+tf.compat.v1.flags.DEFINE_bool('use_txt', default=False, help='use txt files for datasets')
 
 # model params
 tf.compat.v1.flags.DEFINE_integer('num_layers', default=6, help='')
@@ -74,8 +75,8 @@ tf.compat.v1.flags.DEFINE_integer('num_heads', default=8, help='')
 tf.compat.v1.flags.DEFINE_float('dropout', default=0.1, help='')
 tf.compat.v1.flags.DEFINE_integer('dict_size', default=(2**15), help='')
 tf.compat.v1.flags.DEFINE_integer('epochs', default=500, help='')
-tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(16), help='')
-tf.compat.v1.flags.DEFINE_integer('batch_size', default=1, help='')
+tf.compat.v1.flags.DEFINE_integer('buffer_size', default=(128), help='')
+tf.compat.v1.flags.DEFINE_integer('batch_size', default=32, help='')
 tf.compat.v1.flags.DEFINE_float('train_dev_split', default=1.0, help='')
 tf.compat.v1.flags.DEFINE_integer('total_samples', default=10000000, help='')
 tf.compat.v1.flags.DEFINE_bool('show_batch_stats', default=True, help='do prediction, decoding')
@@ -92,8 +93,8 @@ tf.compat.v1.flags.DEFINE_integer('max_seq_decoding', default=768, help='max len
 tf.compat.v1.flags.DEFINE_float('weight_lm', default=1., help='weight of the LM in decoding (should be in [0, 2])')
 
 # for prediction purposes only
-tf.compat.v1.flags.DEFINE_string('in_file_decode', default='corpora/cna/dev/dev_phrase_wronged.txt', help='')
-tf.compat.v1.flags.DEFINE_string('out_file_decode', default='corpora/cna/dev/raw_beam8_b/dev_phrase_predicted.txt', help='')
+tf.compat.v1.flags.DEFINE_string('in_file_decode', default='corpora/cna/test/test_combined_wronged.txt', help='')
+tf.compat.v1.flags.DEFINE_string('out_file_decode', default='corpora/cna/test/base_beam8_b/test_combined_predicted.txt', help='')
 
 # dummy values
 tf.compat.v1.flags.DEFINE_string('subwords_path', default='', help='path to subwords path')
@@ -115,7 +116,17 @@ if args.d_model == 64:
     args.dff = 64
     args.num_heads = 2
     args.num_layers = 2
+    args.max_seq_decoding = 64
     args.dict_size = 1024
+    args.dropout = 0.2
+elif args.d_model == 128:
+    args.seq_length = 128
+    args.dff = 128
+    args.num_heads = 2
+    args.num_layers = 3
+    args.max_seq_decoding = 128
+    args.dict_size = 2048
+    args.dropout = 0.2
 elif args.d_model == 256:
     args.seq_length = 256 
 elif args.d_model == 768:
@@ -153,6 +164,7 @@ def correct_from_file(in_file: str, out_file: str):
             fout.write(predicted_sentence.strip())
             fout.write('\n')
             fout.flush()
+           
 
 def correct_gec(sentence: str, plot=''):
     global tokenizer_ro, lm_model
@@ -163,6 +175,7 @@ def correct_gec(sentence: str, plot=''):
         lm_model = kenlm.Model(args.lm_path)
         
     beams, attention_weights = generate_sentence_beam(sentence)
+
     candidates = []
     for beam in beams:
         sentence_ids = []
@@ -411,13 +424,13 @@ def train_gec():
         with tf.GradientTape() as tape:
             if args.bert:
                 predictions, _ = transformer(inp, inp_segs, tar_inp, 
-                                        True, 
+                                        False, 
                                         enc_padding_mask, 
                                         combined_mask, 
                                         dec_padding_mask)
             else:
                 predictions, _ = transformer(inp, tar_inp, 
-                                        True, 
+                                        False, 
                                         enc_padding_mask, 
                                         combined_mask, 
                                         dec_padding_mask)
