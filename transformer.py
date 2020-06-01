@@ -49,7 +49,7 @@ tf.compat.v1.flags.DEFINE_string('bucket', default='ro-gec', help='path from whe
 # paths for datasets  1k_clean_dirty_better.txt 30k_clean_dirty_better.txt 10_mil_dirty_clean_better.txt
 tf.compat.v1.flags.DEFINE_string('dataset_file', default='corpora/cna/train/train_combined.txt', help='')
 tf.compat.v1.flags.DEFINE_string('dataset_file_dev', default='corpora/cna/dev/dev_combined.txt', help='')
-tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/ronac_transformer_128_small_train',
+tf.compat.v1.flags.DEFINE_string('checkpoint', default='checkpoints/ronac_transformer_128_03',
                 help='Checpoint save locations, or restore')
 tf.compat.v1.flags.DEFINE_string('bert_model_dir', default='bert/bert_ro_256/', help='path from where to load bert')
 tf.compat.v1.flags.DEFINE_string('tf_records', default='corpora/tf_records/transformer_finetune_128', help='path to tf records folder')
@@ -93,8 +93,8 @@ tf.compat.v1.flags.DEFINE_integer('max_seq_decoding', default=768, help='max len
 tf.compat.v1.flags.DEFINE_float('weight_lm', default=1., help='weight of the LM in decoding (should be in [0, 2])')
 
 # for prediction purposes only
-tf.compat.v1.flags.DEFINE_string('in_file_decode', default='corpora/cna/test/test_combined_wronged.txt', help='')
-tf.compat.v1.flags.DEFINE_string('out_file_decode', default='corpora/cna/test/base_beam8_b/test_combined_predicted.txt', help='')
+tf.compat.v1.flags.DEFINE_string('in_file_decode', default='corpora/cna/test/test_sent_wronged.txt', help='')
+tf.compat.v1.flags.DEFINE_string('out_file_decode', default='corpora/cna/test/base_beam8_b/test_sent_predicted.txt', help='')
 
 # dummy values
 tf.compat.v1.flags.DEFINE_string('subwords_path', default='', help='path to subwords path')
