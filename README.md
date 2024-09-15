@@ -30,3 +30,13 @@ If you want to run on tpu, you can use the `--use_tpu=True` argument, but you ne
 
 #### Install ERRANT
 You can use errant normall, just pass the argument -lang ro if you want to use it for Romanian.  More details in the ERRANT readme.
+
+## Citing 
+@inproceedings{cotet2020neural,
+  title={Neural grammatical error correction for romanian},
+  author={Cotet, Teodor-Mihai and Ruseti, Stefan and Dascalu, Mihai},
+  booktitle={2020 IEEE 32nd International Conference on Tools with Artificial Intelligence (ICTAI)},
+  pages={625--631},
+  year={2020},
+  organization={IEEE}
+}
