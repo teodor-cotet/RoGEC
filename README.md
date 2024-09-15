@@ -3,8 +3,8 @@
 This repository contains the code and data for: romanian grammatical error correction (GEC) on RONACC.  
 
 ## Download Data 
-
 Download the RONACC corpus: [RONACC](https://nextcloud.readerbench.com/index.php/s/9pwymesT5sycxoM)
+
 Tokenized RONACC corpus: [RONACC extra](https://drive.google.com/file/d/1un7Gy2EbBuroMyyrn3lOq7N76ODMxYfR/view?usp=sharing)
 
 
